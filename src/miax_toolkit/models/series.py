@@ -14,7 +14,7 @@ class PriceSeries:
     prices: pd.Series = field(repr=False)
 
     mean: float = field(init=False)
-    std: float = field(init=False)
+    std_return: float = field(init=False)
 
     def __post_init__(self) -> None:
         if not isinstance(self.prices, pd.Series):
