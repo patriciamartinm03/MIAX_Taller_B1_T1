@@ -26,3 +26,17 @@ def simulate_returns(
     drift = mu - 0.5 * np.diag(cov)
 
     return np.exp(drift + shocks) - 1
+
+
+def returns_to_paths(
+    returns: np.ndarray,
+    weights: np.ndarray,
+    initial_value: float = 100.0,
+) -> np.ndarray:
+    """Devuelve el valor de la cartera. Forma: (n_sims, horizon + 1)."""
+    weights = np.asarray(weights, dtype=float)
+    portfolio_returns = returns @ weights
+    growth = np.cumprod(1 + portfolio_returns, axis=1)
+    start = np.ones((returns.shape[0], 1))
+
+    return initial_value * np.concatenate([start, growth], axis=1)
