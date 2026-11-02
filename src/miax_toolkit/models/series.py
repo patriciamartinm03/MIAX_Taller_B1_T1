@@ -13,7 +13,7 @@ class PriceSeries:
     source: str
     prices: pd.Series = field(repr=False)
 
-    mean: float = field(init=False)
+    mean_return: float = field(init=False)
     std_return: float = field(init=False)
 
     def __post_init__(self) -> None:
