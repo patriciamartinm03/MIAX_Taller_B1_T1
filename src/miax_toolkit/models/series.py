@@ -12,6 +12,7 @@ class PriceSeries:
     currency: str
     source: str
     prices: pd.Series = field(repr=False)
+    price_type: str
 
     mean_return: float = field(init=False)
     std_return: float = field(init=False)
