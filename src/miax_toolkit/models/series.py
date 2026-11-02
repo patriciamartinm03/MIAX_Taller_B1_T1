@@ -5,6 +5,7 @@ import pandas as pd
 
 @dataclass
 class PriceSeries:
+    """Price series of an asset, with validation and basic return statistics."""
     ticker: str
     name: str
     asset_type: str
