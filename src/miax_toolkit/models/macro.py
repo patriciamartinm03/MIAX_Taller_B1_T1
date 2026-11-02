@@ -29,6 +29,22 @@ class MacroSeries:
         if self.values.index.has_duplicates:
             raise ValueError("There are repeated dates")
 
+        # Allowed units:
+        #   "percent" -> rate as a percentage: 3.75 means 3.75 %
+        #   "decimal" -> rate as a decimal:    0.0375 means 3.75 %
+        #   "index"   -> index with a base:    CPI (2015 = 100) -> 118.2
+        #   "level"   -> absolute amount:      GDP in billions -> 1500
+        self.units = self.units.lower()
+        if self.units not in ("percent", "decimal", "index", "level"):
+            raise ValueError(
+                f"units must be 'percent', 'decimal', 'index' or 'level', not '{self.units}'"
+            )
+        if self.units == "decimal" and (self.values.abs() > 0.5).any():
+            raise ValueError(
+                "units='decimal' but there are values above 0.5; "
+                "a rate above 50 % is unrealistic, so these look like percentages (use units='percent')"
+            )
+
         self.values = self.values.sort_index()
 
         self.mean = float(self.values.mean())
