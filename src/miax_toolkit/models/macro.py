@@ -48,3 +48,11 @@ class MacroSeries:
         self.values = self.values.sort_index()
 
         self.mean = float(self.values.mean())
+
+    def as_decimal(self) -> pd.Series:
+        """Values as decimals (3.75 % -> 0.0375). Only for percent or decimal units."""
+        if self.units == "percent":
+            return self.values / 100
+        if self.units == "decimal":
+            return self.values
+        raise ValueError(f"Cannot convert units '{self.units}' to decimal")
