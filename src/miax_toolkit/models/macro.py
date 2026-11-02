@@ -12,6 +12,7 @@ class MacroSeries:
     source: str
     as_of: date
     values: pd.Series = field(repr=False)
+    currency: str | None
 
     mean: float = field(init=False)
 
