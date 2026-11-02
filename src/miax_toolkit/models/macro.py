@@ -20,6 +20,8 @@ class MacroSeries:
             raise TypeError("values must be a pandas Series")
         if not isinstance(self.values.index, pd.DatetimeIndex):
             raise TypeError("values must have dates as its index")
+        if not pd.api.types.is_numeric_dtype(self.values):
+            raise TypeError("values must be numeric")
         if len(self.values) < 1:
             raise ValueError("Need at least one value")
         if self.values.isna().any():
