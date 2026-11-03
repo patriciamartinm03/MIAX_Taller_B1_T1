@@ -53,4 +53,5 @@ class PriceSeries:
         self.std_return = float(returns.std())
 
     def daily_returns(self) -> pd.Series:
+        """Simple daily returns (pct change between consecutive prices)."""
         return self.prices.pct_change().dropna()
