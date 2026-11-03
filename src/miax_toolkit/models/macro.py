@@ -6,6 +6,8 @@ import pandas as pd
 
 @dataclass
 class MacroSeries:
+    """Macro indicator (rate, index or level) from a data source, as known on as_of."""
+
     series_id: str
     name: str
     units: str
