@@ -6,6 +6,7 @@ import pandas as pd
 @dataclass
 class PriceSeries:
     """Price series of an asset, with validation and basic return statistics."""
+
     ticker: str
     name: str
     asset_type: str
@@ -29,8 +30,15 @@ class PriceSeries:
             raise ValueError(
                 f"asset_type must be 'equity', 'etf' or 'index', not '{self.asset_type}'"
             )
-        if len(self.prices) < 2:
-            raise ValueError("Need at least two prices to calculate returns")
+        self.price_type = self.price_type.lower()
+        if self.price_type not in ("close", "adj_close"):
+            raise ValueError(
+                f"price_type must be 'close' or 'adj_close', not '{self.price_type}'"
+            )
+        if len(self.prices) < 3:
+            raise ValueError(
+                "Need at least three prices to calculate mean and std of returns"
+            )
         if self.prices.isna().any():
             raise ValueError("There are empty prices (NaN)")
         if (self.prices <= 0).any():
@@ -41,8 +49,8 @@ class PriceSeries:
         self.prices = self.prices.sort_index()
 
         returns = self.daily_returns()
-        self.mean = float(returns.mean())
-        self.std = float(returns.std())
+        self.mean_return = float(returns.mean())
+        self.std_return = float(returns.std())
 
     def daily_returns(self) -> pd.Series:
         return self.prices.pct_change().dropna()
