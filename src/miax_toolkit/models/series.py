@@ -24,6 +24,7 @@ class PriceSeries:
             raise TypeError("prices must have dates as its index")
         if not pd.api.types.is_numeric_dtype(self.prices):
             raise TypeError("prices must be numeric")
+        self.asset_type = self.asset_type.lower()
         if self.asset_type not in ("equity", "etf", "index"):
             raise ValueError(
                 f"asset_type must be 'equity', 'etf' or 'index', not '{self.asset_type}'"
