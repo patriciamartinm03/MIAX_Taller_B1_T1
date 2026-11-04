@@ -58,10 +58,10 @@ class SimulationResult:
         table = self.percentiles()
 
         ax.plot(days, self.paths[:n_paths].T, color="tab:blue", alpha=0.08)
-        ax.plot(days, table["p50"], color="black", label="Mediana")
-        ax.plot(days, table["p5"], color="tab:red", ls="--", label="Percentil 5")
-        ax.plot(days, table["p95"], color="tab:green", ls="--", label="Percentil 95")
-        ax.set(title="Trayectorias simuladas", xlabel="Día", ylabel="Valor")
+        ax.plot(days, table["p50"], color="black", label="Median")
+        ax.plot(days, table["p5"], color="tab:red", ls="--", label="5th percentile")
+        ax.plot(days, table["p95"], color="tab:green", ls="--", label="95th percentile")
+        ax.set(title="Simulated paths", xlabel="Day", ylabel="Value")
         ax.legend()
         return ax
 
@@ -70,10 +70,10 @@ class SimulationResult:
         if ax is None:
             _, ax = plt.subplots(figsize=(10, 5))
         ax.hist(self.final_values, bins=bins, color="tab:blue", alpha=0.7)
-        ax.axvline(self.config.initial_value, color="black", ls="--", label="Inicial")
-        ax.set(
-            title="Distribución del valor final", xlabel="Valor", ylabel="Simulaciones"
+        ax.axvline(
+            self.config.initial_value, color="black", ls="--", label="Initial value"
         )
+        ax.set(title="Final value distribution", xlabel="Value", ylabel="Simulations")
         ax.legend()
         return ax
 
