@@ -22,7 +22,7 @@ class YFinanceProvider(PriceProvider):
             )
         self.price_type = price_type
 
-    def get_prices(self, ticker: str, start: date, end: date) -> PriceSeries:
+    def _fetch_prices(self, ticker: str, start: date, end: date) -> PriceSeries:
         yf_ticker = yf.Ticker(ticker)
         history = yf_ticker.history(
             start=start,
