@@ -6,6 +6,21 @@ from miax_toolkit import metrics
 from miax_toolkit.constants import BASE_CURRENCY
 
 
+def _validate_series(values: pd.Series, label: str) -> None:
+    if not isinstance(values, pd.Series):
+        raise TypeError(f"{label} must be a pandas Series")
+    if not isinstance(values.index, pd.DatetimeIndex):
+        raise TypeError(f"{label} must have dates as its index")
+    if not pd.api.types.is_numeric_dtype(values):
+        raise TypeError(f"{label} must be numeric")
+    if values.isna().any():
+        raise ValueError(f"There are empty values in {label} (NaN)")
+    if (values <= 0).any():
+        raise ValueError(f"There are values less than or equal to 0 in {label}")
+    if values.index.has_duplicates:
+        raise ValueError(f"There are repeated dates in {label}")
+
+
 @dataclass
 class PriceSeries:
     """Price series of an asset, with validation and basic return statistics."""
@@ -25,7 +40,7 @@ class PriceSeries:
     std_return_usd: float = field(init=False)
 
     def __post_init__(self) -> None:
-        metrics.validate_price_series(self.prices, "prices")
+        _validate_series(self.prices, "prices")
         self.asset_type = self.asset_type.lower()
         if self.asset_type not in ("equity", "etf", "index"):
             raise ValueError(
@@ -52,7 +67,7 @@ class PriceSeries:
         else:
             if self.fx_to_usd is None:
                 raise ValueError(f"fx_to_usd is required for assets in {self.currency}")
-            metrics.validate_price_series(self.fx_to_usd, "fx_to_usd")
+            _validate_series(self.fx_to_usd, "fx_to_usd")
             self.fx_to_usd = self.fx_to_usd.sort_index()
             first_fx, last_fx = self.fx_to_usd.index[0], self.fx_to_usd.index[-1]
             first_price, last_price = self.prices.index[0], self.prices.index[-1]
