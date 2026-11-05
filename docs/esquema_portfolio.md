@@ -92,7 +92,7 @@ _Actualizado: 5 de noviembre de 2026._
 - [ ] Que los rendimientos de cada activo llamen a los rendimientos diarios de `metrics.py` en vez de repetir la fórmula.
 
 ### Tipo sin riesgo
-- [ ] Que la cartera pueda recibir el tipo sin riesgo (letra del Tesoro a 3 meses de la FRED). Es opcional.
+- [ ] Que la cartera pueda recibir el tipo sin riesgo (letra del Tesoro a 3 meses de la FRED).
 - [ ] Que dé el tipo diario de cada fecha de la cartera, o 0 si no se ha pasado.
 
 ### Composición
@@ -128,16 +128,13 @@ _Actualizado: 5 de noviembre de 2026._
 
 - [ ] Confirmar la opción C (tipo de cambio dentro de cada activo).
 - [ ] Decidir si se incluye el índice de referencia.
-- [ ] Decidir si los tests se suben al repo.
-- [ ] Revisar y aceptar la PR de `patricia`.
-- [ ] Que el extractor descargue el tipo de cambio de los activos que no están en dólares (sin eso, la cartera no puede crearse con activos europeos).
 - [ ] Que el resultado de la simulación guarde el tipo de rebalanceo y los supuestos usados, para que la cartera pueda anualizarlos.
 - [ ] Que el resultado de la simulación use la probabilidad de pérdida, el VaR y el CVaR de `metrics.py`.
 - [ ] Decidir si se pasa a rebalanceo periódico (mensual o trimestral) en vez de diario. Si se hace, el valor histórico de la cartera debería usar el mismo.
 
 ---
 
-## Orden propuesto
+## Orden
 
 1. `metrics.py`: piezas básicas, métricas nuevas y arreglos.
 2. Validaciones nuevas, reutilizar `metrics.py` y tipo sin riesgo.
