@@ -16,7 +16,6 @@ class Portfolio:
     name: str
     assets: list[PriceSeries] = field(repr=False)
     weights: list[float]
-    base_currency: str = "USD"
 
     prices: pd.DataFrame = field(init=False, repr=False)
 
@@ -31,8 +30,6 @@ class Portfolio:
         tickers = [asset.ticker for asset in self.assets]
         if len(set(tickers)) != len(tickers):
             raise ValueError("There are repeated assets")
-        if any(asset.currency != self.base_currency for asset in self.assets):
-            raise ValueError(f"All assets must be in {self.base_currency}")
         if len({asset.price_type for asset in self.assets}) != 1:
             raise ValueError("All assets must use the same price_type")
 
@@ -43,7 +40,7 @@ class Portfolio:
             raise ValueError("weights must add up to 1")
 
         self.prices = align_prices(
-            {asset.ticker: asset.prices for asset in self.assets}
+            {asset.ticker: asset.usd_prices() for asset in self.assets}
         )
         if len(self.prices) < 3:
             raise ValueError("Need at least three common dates")
