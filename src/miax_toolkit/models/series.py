@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+from miax_toolkit import metrics
+
 
 @dataclass
 class PriceSeries:
@@ -53,5 +55,16 @@ class PriceSeries:
         self.std_return = float(returns.std())
 
     def daily_returns(self) -> pd.Series:
-        """Simple daily returns (pct change between consecutive prices)."""
-        return self.prices.pct_change().dropna()
+        return self.prices.pct_change(fill_method=None).dropna()
+
+    @property
+    def annual_return(self) -> float:
+        return metrics.annual_return(self.daily_returns())
+
+    @property
+    def annual_volatility(self) -> float:
+        return metrics.annual_volatility(self.daily_returns())
+
+    @property
+    def max_drawdown(self) -> float:
+        return metrics.max_drawdown(self.prices)
