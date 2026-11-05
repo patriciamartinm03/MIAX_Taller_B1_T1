@@ -10,9 +10,11 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "fredapi>=0.5.2",
     "matplotlib>=3.11.2",
     "numpy>=2.5.4",
     "pandas>=3.1.0",
+    "tiingo>=0.16.1",
     "yfinance>=1.7.0",
 ]
 
