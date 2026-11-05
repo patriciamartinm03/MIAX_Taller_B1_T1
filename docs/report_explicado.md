@@ -19,9 +19,9 @@ Así que el report va en este orden:
 
 La composición va antes que los números porque los explica. Lo que más influye en cómo le va a una cartera es en qué está invertida, así que tiene sentido ver eso primero. La diversificación va después porque explica algo que se ve en la tabla de rendimientos: que la cartera suele tener menos riesgo que la mayoría de sus activos por separado.
 
-Una cosa que decidí desde el principio es que el report no calcula nada. Todos los números salen de `Portfolio`, de las funciones de métricas o del resultado de la simulación, y el report solo los ordena y les da formato. Así los cálculos se pueden probar por separado, y si algún día se quiere el report en otro formato no hay que tocar las fórmulas.
+Todos los números salen de `Portfolio`, de las funciones de métricas o del resultado de la simulación, y el report solo los ordena y les da formato. Así los cálculos se pueden probar por separado, y si algún día se quiere el report en otro formato no hay que tocar las fórmulas.
 
-Todo está en dólares, que es la divisa base que acordamos en el grupo para las carteras.
+Todo está en dólares.
 
 ## 1. Cabecera
 
@@ -52,8 +52,9 @@ Debajo:
 
 - **Exposición por divisa:** qué parte de la cartera está en activos en dólares y qué parte en euros u otras divisas. Como en el grupo decidimos no cubrir el riesgo de divisa, me parece importante mostrar cuánto hay.
 - **Peso máximo:** para ver de un vistazo si un activo domina la cartera.
-- **Número efectivo de activos:** es 1 dividido entre la suma de los pesos al cuadrado. Lo que dice es a cuántos activos con el mismo peso equivale la cartera. Por ejemplo, una cartera con cinco activos pero con un 80 % en uno solo equivale a algo menos de dos. Lo elegí porque resume la concentración en un número que se entiende.
-- **Regiones de la cartera frente a las del índice de referencia:** para que se vea que el índice está bien elegido.
+- **Número efectivo de activos:** es 1 dividido entre la suma de los pesos al cuadrado. Lo que dice es a cuántos activos con el mismo peso equivale la cartera.
+Por ejemplo, una cartera con cinco activos pero con un 80 % en uno solo equivale a algo menos de dos. Resume la concentración en un número que se entiende creo.
+- **Regiones de la cartera frente a las del índice de referencia:** para que se vea que el índice está bien elegido. (depende de si hacemos lo del indice autocreado en base a los etfs por regiones)
 
 ## 4. Rendimiento y riesgo
 
@@ -69,7 +70,7 @@ Las columnas:
 
 Muestro la rentabilidad anual y el CAGR a la vez a propósito, porque no son lo mismo y cada una sirve para una cosa. La rentabilidad anual es una media aritmética: es la que se usa para calcular el Sharpe y para la simulación. El CAGR es una media geométrica: es la que dice cuánto ha crecido el dinero. Cuando hay volatilidad, el CAGR siempre sale más bajo (más o menos, la media menos la mitad de la varianza). Un ejemplo sencillo: si algo sube un 50 % y luego baja un 50 %, la media aritmética es 0 %, pero en realidad has perdido un 25 %.
 
-**Sobre el Sharpe.** Es la rentabilidad que se obtiene por encima del tipo sin riesgo, dividida entre la volatilidad. Como tipo sin riesgo he elegido la letra del Tesoro de EE. UU. a 3 meses, que se saca de la FRED. Es lo más parecido a invertir en dólares sin riesgo a corto plazo, y encaja con que la cartera esté en dólares. El bono a 10 años no sirve para esto porque tiene riesgo si cambian los tipos de interés.
+**Sobre el Sharpe.** Es la rentabilidad que se obtiene por encima del tipo sin riesgo, dividida entre la volatilidad. Como tipo sin riesgo: la letra del Tesoro de EE. UU. a 3 meses, que se saca de la FRED. Es lo más parecido a invertir en dólares sin riesgo a corto plazo, y encaja con que la cartera esté en dólares. El bono a 10 años no sirve para esto porque tiene riesgo si cambian los tipos de interés.
 
 Como el tipo sin riesgo cambia a lo largo del periodo, no resto una media al final. Lo que hago es restar a cada día su tipo (el anual entre 252) y calcular el Sharpe sobre esa serie de diferencias. Es como lo recomienda el propio Sharpe cuando el tipo no es constante. Si el tipo no cambiara, saldría lo mismo que con la fórmula de siempre.
 
@@ -79,7 +80,7 @@ Como el tipo sin riesgo cambia a lo largo del periodo, no resto una media al fin
 
 (1 + rentabilidad en dólares) = (1 + rentabilidad en su divisa) × (1 + variación del tipo de cambio)
 
-Por ejemplo, si un activo europeo sube un 10 % en euros pero el euro cae un 5 % frente al dólar, en dólares solo ha ganado un 4,5 %. Sin esta separación el report no podría explicar por qué. Como no cubrimos la divisa, me parecía necesario mostrarlo. Y con la forma en que se guardan los datos (cada activo tiene sus precios originales y su tipo de cambio) sale casi sin esfuerzo.
+>>Por ejemplo, si un activo europeo sube un 10 % en euros pero el euro cae un 5 % frente al dólar, en dólares solo ha ganado un 4,5 %. Sin esta separación el report no podría explicar por qué. Como no cubrimos la divisa, me parecía necesario mostrarlo. Y con la forma en que se guardan los datos (cada activo tiene sus precios originales y su tipo de cambio) sale casi sin esfuerzo.
 
 **Debajo de la tabla**, para la cartera, pongo las fechas del drawdown máximo: cuándo fue el pico, cuándo el punto más bajo y cuándo se recuperó (o si no se ha recuperado todavía). Ayuda a ponerlo en contexto, por ejemplo si fue la caída de 2020, y a ver cuánto se tardó en salir. También pongo el tipo sin riesgo medio del periodo, porque el Sharpe depende de él y sin verlo no se puede comprobar.
 
