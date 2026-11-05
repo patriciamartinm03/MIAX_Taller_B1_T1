@@ -33,29 +33,55 @@ class SimulationResult:
     def final_values(self) -> np.ndarray:
         return self.paths[:, -1]
 
+    def prob_loss(self) -> float:
+        """Share of simulations that end below the initial value."""
+        return float((self.final_values < self.config.initial_value).mean())
+
+    def value_at_risk(self, level: float = 5) -> float:
+        """Loss at the given percentile of final values, as a fraction of the initial value.
+
+        E.g. 0.18 means: in the worst `level` % of simulations you lose at least 18 %.
+        """
+        return float(
+            1 - np.percentile(self.final_values, level) / self.config.initial_value
+        )
+
     def percentiles(self, levels: tuple[int, ...] = (5, 50, 95)) -> pd.DataFrame:
         values = np.percentile(self.paths, levels, axis=0).T
         return pd.DataFrame(values, columns=[f"p{level}" for level in levels])
 
-    def plot_paths(self, n_paths: int = 100) -> None:
+    def plot_paths(self, n_paths: int = 100, ax: plt.Axes | None = None) -> plt.Axes:
+        """Simulated paths with the median and the 5-95 percentile band."""
+        if ax is None:
+            _, ax = plt.subplots(figsize=(10, 5))
         days = np.arange(self.paths.shape[1])
         table = self.percentiles()
 
-        _, ax = plt.subplots(figsize=(10, 5))
         ax.plot(days, self.paths[:n_paths].T, color="tab:blue", alpha=0.08)
-        ax.plot(days, table["p50"], color="black", label="Mediana")
-        ax.plot(days, table["p5"], color="tab:red", ls="--", label="Percentil 5")
-        ax.plot(days, table["p95"], color="tab:green", ls="--", label="Percentil 95")
-        ax.set(title="Trayectorias simuladas", xlabel="Día", ylabel="Valor")
+        ax.plot(days, table["p50"], color="black", label="Median")
+        ax.plot(days, table["p5"], color="tab:red", ls="--", label="5th percentile")
+        ax.plot(days, table["p95"], color="tab:green", ls="--", label="95th percentile")
+        ax.set(title="Simulated paths", xlabel="Day", ylabel="Value")
         ax.legend()
-        plt.show()
+        return ax
 
-    def plot_distribution(self, bins: int = 50) -> None:
-        _, ax = plt.subplots(figsize=(10, 5))
+    def plot_distribution(self, bins: int = 50, ax: plt.Axes | None = None) -> plt.Axes:
+        """Histogram of final values, with the initial value as reference."""
+        if ax is None:
+            _, ax = plt.subplots(figsize=(10, 5))
         ax.hist(self.final_values, bins=bins, color="tab:blue", alpha=0.7)
-        ax.axvline(self.config.initial_value, color="black", ls="--", label="Inicial")
-        ax.set(
-            title="Distribución del valor final", xlabel="Valor", ylabel="Simulaciones"
+        ax.axvline(
+            self.config.initial_value, color="black", ls="--", label="Initial value"
         )
+        ax.set(title="Final value distribution", xlabel="Value", ylabel="Simulations")
         ax.legend()
+        return ax
+
+    def plot(self) -> plt.Figure:
+        """Show simulated paths and final values side by side."""
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+        self.plot_paths(ax=axes[0])
+        self.plot_distribution(ax=axes[1])
+        fig.tight_layout()
         plt.show()
+        return fig
