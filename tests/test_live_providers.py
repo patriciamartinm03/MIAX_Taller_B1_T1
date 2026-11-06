@@ -2,10 +2,16 @@
 
 Skipped by default. Run with:
 
-    uv run pytest -m live -v
+    uv run --env-file .env pytest -m live -v
+
+Run a single provider with -k, e.g. `-k tiingo`, `-k fred` or `-k yfinance`.
 
 They need network access. Tiingo and FRED tests also need TIINGO_API_KEY and
 FRED_API_KEY in the environment and are skipped when the key is missing.
+pytest does not read .env by itself: put the keys in .env (copy .env.example)
+and pass it with --env-file as above, or export the variables in your shell.
+Behind a corporate VPN with TLS inspection the calls fail with
+CERTIFICATE_VERIFY_FAILED; run the tests from a network without it.
 
 Assertions check only stable facts (types, units, currency, date bounds,
 plausible values) over a fixed past range, so results do not drift over time.

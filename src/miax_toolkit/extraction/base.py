@@ -118,4 +118,6 @@ def to_naive_dates(index: pd.DatetimeIndex) -> pd.DatetimeIndex:
     """Drop timezone and time of day, so series from different markets align by date."""
     if index.tz is not None:
         index = index.tz_localize(None)
-    return index.normalize()
+    # pandas 3 keeps the parsed resolution (s/ms/us/ns); pin it so indexes
+    # from different providers compare equal.
+    return index.normalize().as_unit("ns")
