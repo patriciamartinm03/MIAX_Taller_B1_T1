@@ -92,6 +92,11 @@ def test_risk_free_in_eur_fails():
         Portfolio("Test", [SPX], [1.0], rate)
 
 
+def test_rate_currency_is_uppercased_and_none_is_kept():
+    assert make_rate([3.0, 3.1], RATE_DATES, currency="usd").currency == "USD"
+    assert make_rate([3.0, 3.1], RATE_DATES, currency=None).currency is None
+
+
 def test_risk_free_with_wrong_units_fails():
     rate = make_rate([118.0, 119.0], RATE_DATES, units="index")
     with pytest.raises(ValueError, match="risk_free units must be"):
