@@ -177,3 +177,207 @@ def test_correlation_has_ones_on_the_diagonal():
     other = make_series("NDX", "USD", [100, 98, 103, 101, 106])
     correlation = Portfolio("Test", [SPX, other], [0.5, 0.5]).correlation()
     assert correlation.to_numpy().diagonal().tolist() == pytest.approx([1.0, 1.0])
+
+
+METRIC_COLUMNS = [
+    "annual_return",
+    "cagr",
+    "annual_volatility",
+    "sharpe",
+    "sortino",
+    "max_drawdown",
+]
+
+
+def test_metrics_table_has_one_row_per_asset_plus_portfolio():
+    other = make_series("NDX", "USD", [100, 98, 103, 101, 106])
+    portfolio = Portfolio("Test", [SPX, other], [0.5, 0.5])
+    table = portfolio.metrics_table()
+    assert table.index.name == "asset"
+    assert table.index.tolist() == ["SPX", "NDX", "Portfolio"]
+    assert table.columns.tolist() == METRIC_COLUMNS
+
+    benchmark = Portfolio("Benchmark", [SPX], [1.0])
+    with_benchmark = portfolio.metrics_table(benchmark)
+    assert with_benchmark.index.tolist() == ["SPX", "NDX", "Portfolio", "Benchmark"]
+
+
+def test_benchmark_with_an_extra_day_gives_same_metrics_as_portfolio():
+    portfolio_dates = DATES.delete(2)
+    asset = make_series("SPX", "USD", [100, 102, 99, 104], dates=portfolio_dates)
+    # Same prices plus a dip on a day the portfolio does not have
+    benchmark_asset = make_series("SPY", "USD", [100, 102, 90, 99, 104])
+    portfolio = Portfolio("Test", [asset], [1.0])
+    benchmark = Portfolio("Benchmark", [benchmark_asset], [1.0])
+
+    table = portfolio.metrics_table(benchmark)
+    assert table.loc["Benchmark"].tolist() == pytest.approx(
+        table.loc["Portfolio"].tolist()
+    )
+
+
+def test_benchmark_that_is_not_a_portfolio_fails():
+    portfolio = Portfolio("Test", [SPX], [1.0])
+    with pytest.raises(TypeError, match="benchmark must be a Portfolio"):
+        portfolio.metrics_table(SPX)
+
+
+def test_currency_attribution_combines_local_and_fx_returns():
+    fx = pd.Series([1.10, 1.12, 1.08, 1.11, 1.09], index=DATES)
+    ibex = make_series("IBEX", "EUR", [100, 103, 99, 104, 106], fx)
+    row = Portfolio("Test", [SPX, ibex], [0.5, 0.5]).currency_attribution().loc["IBEX"]
+    assert row["currency"] == "EUR"
+    combined = (1 + row["local_return"]) * (1 + row["fx_return"]) - 1
+    assert combined == pytest.approx(row["usd_return"])
+
+
+def test_currency_attribution_of_rising_asset_with_falling_euro():
+    fx = pd.Series([1.00, 1.00, 1.00, 1.00, 0.95], index=DATES)
+    ibex = make_series("IBEX", "EUR", [100, 102, 104, 107, 110], fx)
+    row = Portfolio("Test", [ibex], [1.0]).currency_attribution().loc["IBEX"]
+    assert row["local_return"] == pytest.approx(0.10)
+    assert row["fx_return"] == pytest.approx(-0.05)
+    assert row["usd_return"] == pytest.approx(0.045)
+
+
+def test_currency_attribution_of_usd_portfolio_is_empty():
+    table = Portfolio("Test", [SPX], [1.0]).currency_attribution()
+    assert table.empty
+    assert table.index.name == "asset"
+    assert table.columns.tolist() == [
+        "currency",
+        "local_return",
+        "fx_return",
+        "usd_return",
+    ]
+
+
+OVERLAP_COLUMNS = ["portfolio_weight", "benchmark_weight", "overlap"]
+
+
+def make_usd_portfolio(name: str, weights: dict[str, float]) -> Portfolio:
+    assets = [
+        make_series(ticker, "USD", [100, 101 + i, 99, 103 + i, 104])
+        for i, ticker in enumerate(weights)
+    ]
+    return Portfolio(name, assets, list(weights.values()))
+
+
+def test_benchmark_named_like_a_ticker_fails():
+    portfolio = make_usd_portfolio("My portfolio", {"SPY": 0.5, "FEZ": 0.5})
+    benchmark = make_usd_portfolio("SPY", {"EWP": 1.0})
+    with pytest.raises(
+        ValueError, match="'SPY' is also a ticker in portfolio 'My portfolio'"
+    ):
+        portfolio.metrics_table(benchmark)
+
+
+def test_benchmark_named_portfolio_fails():
+    portfolio = make_usd_portfolio("My portfolio", {"SPY": 1.0})
+    benchmark = make_usd_portfolio("Portfolio", {"EWP": 1.0})
+    with pytest.raises(ValueError, match="'Portfolio' is reserved"):
+        portfolio.metrics_table(benchmark)
+
+
+def test_benchmark_with_few_common_dates_shows_both_ranges():
+    portfolio = Portfolio("My portfolio", [SPX], [1.0])
+    late = make_series(
+        "SPY",
+        "USD",
+        [100, 101, 102, 103, 104],
+        dates=pd.date_range("2026-01-08", periods=5, freq="B"),
+    )
+    benchmark = Portfolio("Benchmark 60/40", [late], [1.0])
+    with pytest.raises(ValueError) as error:
+        portfolio.metrics_table(benchmark)
+    message = str(error.value)
+    assert "has only 2 dates in common with portfolio 'My portfolio'" in message
+    assert "Portfolio: 2026-01-05 to 2026-01-09" in message
+    assert "benchmark: 2026-01-08 to 2026-01-14" in message
+
+
+def test_benchmark_overlap_keeps_only_shared_assets():
+    portfolio = make_usd_portfolio("My portfolio", {"SPY": 0.4, "FEZ": 0.6})
+    benchmark = make_usd_portfolio("Benchmark", {"SPY": 0.6, "EWP": 0.4})
+    overlap = portfolio.benchmark_overlap(benchmark)
+    assert overlap.index.name == "asset"
+    assert overlap.index.tolist() == ["SPY"]
+    assert overlap.columns.tolist() == OVERLAP_COLUMNS
+    assert overlap.loc["SPY"].tolist() == pytest.approx([0.4, 0.6, 0.4])
+    assert portfolio.benchmark_overlap_share(benchmark) == pytest.approx(0.4)
+
+
+def test_benchmark_overlap_without_shared_assets_is_empty():
+    portfolio = make_usd_portfolio("My portfolio", {"SPY": 1.0})
+    benchmark = make_usd_portfolio("Benchmark", {"EWP": 1.0})
+    overlap = portfolio.benchmark_overlap(benchmark)
+    assert overlap.empty
+    assert overlap.columns.tolist() == OVERLAP_COLUMNS
+    assert portfolio.benchmark_overlap_share(benchmark) == 0
+
+
+def test_benchmark_overlap_with_itself_is_one():
+    portfolio = make_usd_portfolio("My portfolio", {"SPY": 0.3, "FEZ": 0.7})
+    copy = make_usd_portfolio("Copy", {"SPY": 0.3, "FEZ": 0.7})
+    assert portfolio.benchmark_overlap_share(copy) == pytest.approx(1.0)
+
+
+def test_benchmark_that_is_not_a_portfolio_names_the_type():
+    portfolio = Portfolio("Test", [SPX], [1.0])
+    with pytest.raises(TypeError, match="got PriceSeries"):
+        portfolio.benchmark_overlap(SPX)
+    with pytest.raises(TypeError, match="got str"):
+        portfolio.metrics_table("SPY")
+
+
+def test_repeated_ticker_error_names_the_ticker():
+    other = make_series("SPX", "USD", [100, 102, 101, 104, 105])
+    with pytest.raises(ValueError, match="repeated assets: SPX"):
+        Portfolio("Test", [SPX, other], [0.5, 0.5])
+
+
+def test_mixed_price_types_error_lists_each_asset():
+    adjusted = PriceSeries(
+        ticker="NDX",
+        name="NDX",
+        asset_type="index",
+        currency="USD",
+        source="test",
+        prices=pd.Series([100, 101, 102, 103, 104], index=DATES),
+        price_type="adj_close",
+    )
+    with pytest.raises(ValueError, match="SPX: close, NDX: adj_close"):
+        Portfolio("Test", [SPX, adjusted], [0.5, 0.5])
+
+
+def test_weights_sum_error_shows_the_sum():
+    other = make_series("NDX", "USD", [100, 102, 101, 104, 105])
+    with pytest.raises(ValueError, match="they add up to 0.9"):
+        Portfolio("Test", [SPX, other], [0.5, 0.4])
+
+
+def test_negative_weight_error_names_ticker_and_weight():
+    other = make_series("NDX", "USD", [100, 102, 101, 104, 105])
+    with pytest.raises(ValueError, match="weight of NDX is -0.2"):
+        Portfolio("Test", [SPX, other], [1.2, -0.2])
+
+
+def test_nan_weight_error_names_the_ticker():
+    other = make_series("NDX", "USD", [100, 102, 101, 104, 105])
+    with pytest.raises(ValueError, match="weight of NDX is nan"):
+        Portfolio("Test", [SPX, other], [0.5, float("nan")])
+
+
+def test_weight_count_error_shows_both_counts():
+    with pytest.raises(ValueError, match="got 1 assets and 2 weights"):
+        Portfolio("Test", [SPX], [0.5, 0.5])
+
+
+def test_non_price_series_asset_error_names_position_and_type():
+    with pytest.raises(TypeError, match="asset 2 is a str"):
+        Portfolio("Test", [SPX, "NDX"], [0.5, 0.5])
+
+
+def test_risk_free_that_is_not_macro_series_names_the_type():
+    with pytest.raises(TypeError, match="got float"):
+        Portfolio("Test", [SPX], [1.0], 0.03)
