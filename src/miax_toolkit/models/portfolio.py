@@ -22,6 +22,8 @@ class Portfolio:
     prices: pd.DataFrame = field(init=False, repr=False)
     _risk_free_daily: pd.Series | None = field(init=False, repr=False, default=None)
 
+    # Creation and validation
+
     def __post_init__(self) -> None:
         if not self.assets:
             raise ValueError(f"Portfolio '{self.name}' needs at least one asset")
@@ -109,8 +111,7 @@ class Portfolio:
                 f"not '{self.risk_free.units}'"
             )
 
-    def _weights_by_ticker(self) -> pd.Series:
-        return pd.Series(self.weights, index=[asset.ticker for asset in self.assets])
+    # Risk-free rate
 
     def risk_free_daily(self) -> pd.Series | float:
         return 0.0 if self._risk_free_daily is None else self._risk_free_daily
@@ -118,7 +119,22 @@ class Portfolio:
     def risk_free_mean(self) -> float:
         if self._risk_free_daily is None:
             return 0.0
+        # Not MacroSeries.mean: it covers the whole series, not the portfolio period
         return float(metrics.annualize_mean(float(self._risk_free_daily.mean())))
+
+    # Returns
+
+    def _weights_by_ticker(self) -> pd.Series:
+        # Weights are matched by ticker so nothing depends on the column order
+        return pd.Series(self.weights, index=[asset.ticker for asset in self.assets])
+
+    def asset_returns(self) -> pd.DataFrame:
+        return metrics.daily_returns(self.prices)
+
+    def returns(self) -> pd.Series:
+        return self.asset_returns() @ self._weights_by_ticker()
+
+    # Composition
 
     def currency_exposure(self) -> pd.Series:
         currencies = {asset.ticker: asset.currency for asset in self.assets}
@@ -128,11 +144,7 @@ class Portfolio:
     def effective_n_assets(self) -> float:
         return metrics.effective_n_assets(self.weights)
 
-    def asset_returns(self) -> pd.DataFrame:
-        return metrics.daily_returns(self.prices)
-
-    def returns(self) -> pd.Series:
-        return self.asset_returns() @ self._weights_by_ticker()
+    # Historical value
 
     def value(self, initial_value: float = 100.0, rebalance: bool = True) -> pd.Series:
         if rebalance:
@@ -148,6 +160,63 @@ class Portfolio:
 
     def drawdown_details(self) -> metrics.DrawdownDetails:
         return metrics.max_drawdown_details(self.value())
+
+    # Metrics table
+
+    def _metrics_row(self, values: pd.Series, returns: pd.Series) -> dict[str, float]:
+        risk_free = self.risk_free_daily()
+        return {
+            "annual_return": metrics.annual_return(returns),
+            "cagr": metrics.cagr(values),
+            "annual_volatility": metrics.annual_volatility(returns),
+            "sharpe": metrics.sharpe_ratio(returns, risk_free),
+            "sortino": metrics.sortino_ratio(returns, risk_free),
+            "max_drawdown": metrics.max_drawdown(values),
+        }
+
+    def metrics_table(self, benchmark: "Portfolio | None" = None) -> pd.DataFrame:
+        asset_returns = self.asset_returns()
+        rows = {
+            ticker: self._metrics_row(self.prices[ticker], asset_returns[ticker])
+            for ticker in self.prices.columns
+        }
+        rows["Portfolio"] = self._metrics_row(self.value(), self.returns())
+        if benchmark is not None:
+            self._check_benchmark(benchmark)
+            if benchmark.name == "Portfolio":
+                raise ValueError(
+                    "benchmark name 'Portfolio' is reserved for the portfolio row; "
+                    "give the benchmark a different name"
+                )
+            if benchmark.name in self.prices.columns:
+                raise ValueError(
+                    f"benchmark name '{benchmark.name}' is also a ticker in portfolio "
+                    f"'{self.name}'; give the benchmark a different name"
+                )
+            rows[benchmark.name] = self._metrics_row(
+                *self._benchmark_on_common_dates(benchmark)
+            )
+        return pd.DataFrame.from_dict(rows, orient="index").rename_axis("asset")
+
+    # Currency effect
+
+    def currency_attribution(self) -> pd.DataFrame:
+        dates = self.prices.index
+        rows = {
+            asset.ticker: {
+                "currency": asset.currency,
+                "local_return": metrics.total_return(asset.prices.loc[dates]),
+                "fx_return": metrics.total_return(asset.fx_to_usd.loc[dates]),
+                "usd_return": metrics.total_return(self.prices[asset.ticker]),
+            }
+            for asset in self.assets
+            if asset.currency != BASE_CURRENCY
+        }
+        columns = ["currency", "local_return", "fx_return", "usd_return"]
+        table = pd.DataFrame.from_dict(rows, orient="index", columns=columns)
+        return table.rename_axis("asset")
+
+    # Benchmark comparison and overlap
 
     def _check_benchmark(self, benchmark: "Portfolio") -> None:
         if not isinstance(benchmark, Portfolio):
@@ -170,6 +239,7 @@ class Portfolio:
                 f"benchmark: {benchmark_dates[0].date()} to "
                 f"{benchmark_dates[-1].date()}"
             )
+        # Cut values and recompute returns so both cover exactly the same periods
         own_value, benchmark_value = own_value.loc[common], benchmark_value.loc[common]
         return (
             own_value,
@@ -242,56 +312,7 @@ class Portfolio:
     def benchmark_overlap_share(self, benchmark: "Portfolio") -> float:
         return float(self.benchmark_overlap(benchmark)["overlap"].sum())
 
-    def _metrics_row(self, values: pd.Series, returns: pd.Series) -> dict[str, float]:
-        risk_free = self.risk_free_daily()
-        return {
-            "annual_return": metrics.annual_return(returns),
-            "cagr": metrics.cagr(values),
-            "annual_volatility": metrics.annual_volatility(returns),
-            "sharpe": metrics.sharpe_ratio(returns, risk_free),
-            "sortino": metrics.sortino_ratio(returns, risk_free),
-            "max_drawdown": metrics.max_drawdown(values),
-        }
-
-    def metrics_table(self, benchmark: "Portfolio | None" = None) -> pd.DataFrame:
-        asset_returns = self.asset_returns()
-        rows = {
-            ticker: self._metrics_row(self.prices[ticker], asset_returns[ticker])
-            for ticker in self.prices.columns
-        }
-        rows["Portfolio"] = self._metrics_row(self.value(), self.returns())
-        if benchmark is not None:
-            self._check_benchmark(benchmark)
-            if benchmark.name == "Portfolio":
-                raise ValueError(
-                    "benchmark name 'Portfolio' is reserved for the portfolio row; "
-                    "give the benchmark a different name"
-                )
-            if benchmark.name in self.prices.columns:
-                raise ValueError(
-                    f"benchmark name '{benchmark.name}' is also a ticker in portfolio "
-                    f"'{self.name}'; give the benchmark a different name"
-                )
-            rows[benchmark.name] = self._metrics_row(
-                *self._benchmark_on_common_dates(benchmark)
-            )
-        return pd.DataFrame.from_dict(rows, orient="index").rename_axis("asset")
-
-    def currency_attribution(self) -> pd.DataFrame:
-        dates = self.prices.index
-        rows = {
-            asset.ticker: {
-                "currency": asset.currency,
-                "local_return": metrics.total_return(asset.prices.loc[dates]),
-                "fx_return": metrics.total_return(asset.fx_to_usd.loc[dates]),
-                "usd_return": metrics.total_return(self.prices[asset.ticker]),
-            }
-            for asset in self.assets
-            if asset.currency != BASE_CURRENCY
-        }
-        columns = ["currency", "local_return", "fx_return", "usd_return"]
-        table = pd.DataFrame.from_dict(rows, orient="index", columns=columns)
-        return table.rename_axis("asset")
+    # Diversification
 
     def correlation(self) -> pd.DataFrame:
         return self.asset_returns().corr()
@@ -304,6 +325,8 @@ class Portfolio:
         )
         return weighted_volatility - metrics.annual_volatility(self.returns())
 
+    # Simulation
+
     def _simulation_inputs(
         self, mu: np.ndarray | None = None, cov: np.ndarray | None = None
     ) -> tuple[np.ndarray, np.ndarray]:
@@ -311,6 +334,7 @@ class Portfolio:
         tickers = list(asset_returns.columns)
         n_assets = len(tickers)
         assets = f"{n_assets}: {', '.join(tickers)}"
+        # The 0.01 limits below catch annual values passed by mistake
 
         if mu is None:
             mu = asset_returns.mean().to_numpy()
