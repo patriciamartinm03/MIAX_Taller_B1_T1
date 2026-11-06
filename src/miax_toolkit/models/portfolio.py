@@ -24,28 +24,55 @@ class Portfolio:
 
     def __post_init__(self) -> None:
         if not self.assets:
-            raise ValueError("A portfolio needs at least one asset")
-        if not all(isinstance(asset, PriceSeries) for asset in self.assets):
-            raise TypeError("assets must be PriceSeries objects")
+            raise ValueError(f"Portfolio '{self.name}' needs at least one asset")
+        for position, asset in enumerate(self.assets, start=1):
+            if not isinstance(asset, PriceSeries):
+                raise TypeError(
+                    f"assets must be PriceSeries objects; asset {position} "
+                    f"is a {type(asset).__name__}"
+                )
         if len(self.weights) != len(self.assets):
-            raise ValueError("There must be one weight per asset")
+            raise ValueError(
+                f"There must be one weight per asset; got {len(self.assets)} assets "
+                f"and {len(self.weights)} weights"
+            )
 
         tickers = [asset.ticker for asset in self.assets]
-        if len(set(tickers)) != len(tickers):
-            raise ValueError("There are repeated assets")
+        repeated = sorted({ticker for ticker in tickers if tickers.count(ticker) > 1})
+        if repeated:
+            raise ValueError(f"There are repeated assets: {', '.join(repeated)}")
         if len({asset.price_type for asset in self.assets}) != 1:
-            raise ValueError("All assets must use the same price_type")
+            price_types = ", ".join(
+                f"{asset.ticker}: {asset.price_type}" for asset in self.assets
+            )
+            raise ValueError(
+                f"All assets must use the same price_type; got {price_types}"
+            )
 
-        try:
-            self.weights = [float(weight) for weight in self.weights]
-        except (TypeError, ValueError):
-            raise ValueError("weights must be finite numbers") from None
-        if not np.isfinite(self.weights).all():
-            raise ValueError("weights must be finite numbers (found NaN or infinity)")
-        if min(self.weights) < 0:
-            raise ValueError("Negative weights are not allowed")
+        weights = []
+        for ticker, weight in zip(tickers, self.weights):
+            try:
+                weight = float(weight)
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"weights must be finite numbers; the weight of {ticker} "
+                    f"is {weight!r}"
+                ) from None
+            if not np.isfinite(weight):
+                raise ValueError(
+                    f"weights must be finite numbers; the weight of {ticker} is {weight}"
+                )
+            if weight < 0:
+                raise ValueError(
+                    f"Negative weights are not allowed; the weight of {ticker} "
+                    f"is {weight}"
+                )
+            weights.append(weight)
+        self.weights = weights
         if not np.isclose(sum(self.weights), 1.0):
-            raise ValueError("weights must add up to 1")
+            raise ValueError(
+                f"weights must add up to 1; they add up to {sum(self.weights):g}"
+            )
 
         self.prices = align_prices(
             {asset.ticker: asset.usd_prices() for asset in self.assets}
@@ -69,7 +96,9 @@ class Portfolio:
 
     def _validate_risk_free(self) -> None:
         if not isinstance(self.risk_free, MacroSeries):
-            raise TypeError("risk_free must be a MacroSeries")
+            raise TypeError(
+                f"risk_free must be a MacroSeries, got {type(self.risk_free).__name__}"
+            )
         if self.risk_free.currency != BASE_CURRENCY:
             raise ValueError(
                 f"risk_free must be in {BASE_CURRENCY}, not {self.risk_free.currency}"
@@ -119,6 +148,94 @@ class Portfolio:
 
     def drawdown_details(self) -> metrics.DrawdownDetails:
         return metrics.max_drawdown_details(self.value())
+
+    def _check_benchmark(self, benchmark: "Portfolio") -> None:
+        if not isinstance(benchmark, Portfolio):
+            raise TypeError(
+                f"benchmark must be a Portfolio, got {type(benchmark).__name__}"
+            )
+
+    def _benchmark_on_common_dates(
+        self, benchmark: "Portfolio"
+    ) -> tuple[pd.Series, pd.Series]:
+        self._check_benchmark(benchmark)
+        benchmark_value = benchmark.value()
+        common = benchmark_value.index.intersection(self.prices.index).sort_values()
+        if len(common) < 3:
+            own_dates, benchmark_dates = self.prices.index, benchmark.prices.index
+            raise ValueError(
+                f"benchmark '{benchmark.name}' has only {len(common)} dates in common "
+                f"with portfolio '{self.name}' (at least 3 are needed). "
+                f"Portfolio: {own_dates[0].date()} to {own_dates[-1].date()}; "
+                f"benchmark: {benchmark_dates[0].date()} to "
+                f"{benchmark_dates[-1].date()}"
+            )
+        value = benchmark_value.loc[common]
+        return value, metrics.daily_returns(value)
+
+    def benchmark_overlap(self, benchmark: "Portfolio") -> pd.DataFrame:
+        self._check_benchmark(benchmark)
+        weights = {
+            "portfolio_weight": self._weights_by_ticker(),
+            "benchmark_weight": benchmark._weights_by_ticker(),
+        }
+        table = pd.concat(weights, axis=1, join="inner")
+        table["overlap"] = table.min(axis=1)
+        return table.rename_axis("asset")
+
+    def benchmark_overlap_share(self, benchmark: "Portfolio") -> float:
+        return float(self.benchmark_overlap(benchmark)["overlap"].sum())
+
+    def _metrics_row(self, values: pd.Series, returns: pd.Series) -> dict[str, float]:
+        risk_free = self.risk_free_daily()
+        return {
+            "annual_return": metrics.annual_return(returns),
+            "cagr": metrics.cagr(values),
+            "annual_volatility": metrics.annual_volatility(returns),
+            "sharpe": metrics.sharpe_ratio(returns, risk_free),
+            "sortino": metrics.sortino_ratio(returns, risk_free),
+            "max_drawdown": metrics.max_drawdown(values),
+        }
+
+    def metrics_table(self, benchmark: "Portfolio | None" = None) -> pd.DataFrame:
+        asset_returns = self.asset_returns()
+        rows = {
+            ticker: self._metrics_row(self.prices[ticker], asset_returns[ticker])
+            for ticker in self.prices.columns
+        }
+        rows["Portfolio"] = self._metrics_row(self.value(), self.returns())
+        if benchmark is not None:
+            self._check_benchmark(benchmark)
+            if benchmark.name == "Portfolio":
+                raise ValueError(
+                    "benchmark name 'Portfolio' is reserved for the portfolio row; "
+                    "give the benchmark a different name"
+                )
+            if benchmark.name in self.prices.columns:
+                raise ValueError(
+                    f"benchmark name '{benchmark.name}' is also a ticker in portfolio "
+                    f"'{self.name}'; give the benchmark a different name"
+                )
+            rows[benchmark.name] = self._metrics_row(
+                *self._benchmark_on_common_dates(benchmark)
+            )
+        return pd.DataFrame.from_dict(rows, orient="index").rename_axis("asset")
+
+    def currency_attribution(self) -> pd.DataFrame:
+        dates = self.prices.index
+        rows = {
+            asset.ticker: {
+                "currency": asset.currency,
+                "local_return": metrics.total_return(asset.prices.loc[dates]),
+                "fx_return": metrics.total_return(asset.fx_to_usd.loc[dates]),
+                "usd_return": metrics.total_return(self.prices[asset.ticker]),
+            }
+            for asset in self.assets
+            if asset.currency != BASE_CURRENCY
+        }
+        columns = ["currency", "local_return", "fx_return", "usd_return"]
+        table = pd.DataFrame.from_dict(rows, orient="index", columns=columns)
+        return table.rename_axis("asset")
 
     def correlation(self) -> pd.DataFrame:
         return self.asset_returns().corr()
