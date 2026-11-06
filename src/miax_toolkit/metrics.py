@@ -9,7 +9,11 @@ FloatOrArray = float | np.ndarray
 
 
 def _check_series(
-    values: pd.Series, label: str, dated: bool = False, positive: bool = False
+    values: pd.Series,
+    label: str,
+    dated: bool = False,
+    positive: bool = False,
+    min_values: int = 2,
 ) -> None:
     if not isinstance(values, pd.Series):
         raise TypeError(f"{label} must be a pandas Series")
@@ -22,8 +26,8 @@ def _check_series(
         raise TypeError(f"{label} must be numeric")
     if values.isna().any():
         raise ValueError(f"There are empty values in {label} (NaN)")
-    if len(values) < 2:
-        raise ValueError(f"{label} needs at least 2 values")
+    if len(values) < min_values:
+        raise ValueError(f"{label} needs at least {min_values} values")
     if positive and (values <= 0).any():
         raise ValueError(f"There are values less than or equal to 0 in {label}")
 
@@ -195,7 +199,7 @@ def max_drawdown_details(values: pd.Series) -> DrawdownDetails:
 
 
 def daily_risk_free(annual_rates: pd.Series, dates: pd.DatetimeIndex) -> pd.Series:
-    _check_series(annual_rates, "annual_rates", dated=True)
+    _check_series(annual_rates, "annual_rates", dated=True, min_values=1)
     if not isinstance(dates, pd.DatetimeIndex) or len(dates) == 0:
         raise TypeError("dates must be a non-empty pandas DatetimeIndex")
     if (annual_rates.abs() > 0.5).any():
