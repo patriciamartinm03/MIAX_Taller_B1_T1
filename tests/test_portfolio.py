@@ -1,11 +1,14 @@
 import math
 from datetime import date
 
+import numpy as np
 import pandas as pd
 import pytest
 
+from miax_toolkit import metrics
 from miax_toolkit.models.macro import MacroSeries
 from miax_toolkit.models.portfolio import Portfolio
+from miax_toolkit.models.results import SimulationConfig
 from miax_toolkit.models.series import PriceSeries
 
 DATES = pd.date_range("2026-01-05", periods=5, freq="B")
@@ -467,3 +470,108 @@ def test_benchmark_issues_and_comparison_need_a_portfolio():
         portfolio.benchmark_issues(SPX)
     with pytest.raises(TypeError, match="got PriceSeries"):
         portfolio.benchmark_comparison(SPX)
+
+
+THREE_ASSETS = {"SPY": 0.4, "FEZ": 0.3, "EWP": 0.3}
+DAILY_MU = [0.0004, 0.0003, 0.0002]
+DAILY_COV = np.diag([0.0001, 0.0002, 0.0003])
+
+
+def test_simulation_assumptions_default_to_historical():
+    portfolio = make_usd_portfolio("My portfolio", THREE_ASSETS)
+    assumptions = portfolio.simulation_assumptions()
+    asset_returns = portfolio.asset_returns()
+    assert assumptions.index.name == "asset"
+    assert assumptions.index.tolist() == asset_returns.columns.tolist()
+    for ticker in asset_returns.columns:
+        returns = asset_returns[ticker]
+        assert assumptions.loc[ticker, "annual_return"] == pytest.approx(
+            metrics.annual_return(returns)
+        )
+        assert assumptions.loc[ticker, "annual_volatility"] == pytest.approx(
+            metrics.annual_volatility(returns)
+        )
+
+
+def test_simulation_assumptions_annualize_given_inputs():
+    portfolio = make_usd_portfolio("My portfolio", THREE_ASSETS)
+    assumptions = portfolio.simulation_assumptions(DAILY_MU, DAILY_COV)
+    assert assumptions.index.tolist() == ["SPY", "FEZ", "EWP"]
+    assert assumptions["annual_return"].tolist() == pytest.approx(
+        [mean * 252 for mean in DAILY_MU]
+    )
+    assert assumptions["annual_volatility"].tolist() == pytest.approx(
+        [(variance * 252) ** 0.5 for variance in np.diag(DAILY_COV)]
+    )
+
+
+def test_monte_carlo_default_equals_historical_inputs_by_hand():
+    # Small daily moves, so the historical inputs pass the "looks annual" checks
+    assets = [
+        make_series("SPY", "USD", [100, 100.5, 100.2, 100.6, 100.9]),
+        make_series("FEZ", "USD", [50, 49.8, 50.1, 50.3, 50.2]),
+        make_series("EWP", "USD", [30, 30.1, 30.0, 30.2, 30.3]),
+    ]
+    portfolio = Portfolio("My portfolio", assets, [0.4, 0.3, 0.3])
+    asset_returns = portfolio.asset_returns()
+    config = SimulationConfig(n_sims=50, horizon_days=10, seed=7)
+    default = portfolio.monte_carlo(config)
+    by_hand = portfolio.monte_carlo(
+        config, asset_returns.mean().to_numpy(), asset_returns.cov().to_numpy()
+    )
+    np.testing.assert_array_equal(default.paths, by_hand.paths)
+
+
+def test_mu_with_wrong_length_shows_both_counts():
+    portfolio = make_usd_portfolio("My portfolio", THREE_ASSETS)
+    with pytest.raises(
+        ValueError, match=r"one value per asset \(3: SPY, FEZ, EWP\), got 2"
+    ):
+        portfolio.simulation_assumptions(mu=[0.0004, 0.0003])
+
+
+def test_cov_with_wrong_shape_shows_both_shapes():
+    portfolio = make_usd_portfolio("My portfolio", THREE_ASSETS)
+    with pytest.raises(ValueError, match=r"3 x 3 matrix.*got shape \(2, 2\)"):
+        portfolio.simulation_assumptions(cov=np.eye(2) * 0.0001)
+
+
+def test_annual_mu_looks_annual():
+    portfolio = make_usd_portfolio("My portfolio", THREE_ASSETS)
+    annual_mu = [0.08, 0.0003, 0.0002]
+    with pytest.raises(ValueError, match="mu for SPY is 0.08, which looks annual"):
+        portfolio.monte_carlo(mu=annual_mu)
+    with pytest.raises(ValueError, match="mu for SPY is 0.08, which looks annual"):
+        portfolio.simulation_assumptions(mu=annual_mu)
+
+
+def test_annual_cov_looks_annual():
+    portfolio = make_usd_portfolio("My portfolio", THREE_ASSETS)
+    annual_cov = np.diag([0.04, 0.04, 0.04])
+    with pytest.raises(ValueError, match="cov diagonal for SPY is 0.04.*looks annual"):
+        portfolio.simulation_assumptions(cov=annual_cov)
+
+
+def test_negative_variance_fails():
+    portfolio = make_usd_portfolio("My portfolio", THREE_ASSETS)
+    cov = np.diag([0.0001, -0.0002, 0.0003])
+    with pytest.raises(ValueError, match="cov diagonal for FEZ is -0.0002"):
+        portfolio.simulation_assumptions(cov=cov)
+
+
+def test_mu_with_nan_names_the_ticker():
+    portfolio = make_usd_portfolio("My portfolio", THREE_ASSETS)
+    with pytest.raises(
+        ValueError, match="mu for FEZ is nan; all values of mu must be finite"
+    ):
+        portfolio.simulation_assumptions(mu=[0.0004, float("nan"), 0.0002])
+
+
+def test_cov_with_infinity_names_row_and_column():
+    portfolio = make_usd_portfolio("My portfolio", THREE_ASSETS)
+    cov = DAILY_COV.copy()
+    cov[0, 2] = np.inf
+    with pytest.raises(
+        ValueError, match="cov for row SPY and column EWP is inf; all values of cov"
+    ):
+        portfolio.simulation_assumptions(cov=cov)
