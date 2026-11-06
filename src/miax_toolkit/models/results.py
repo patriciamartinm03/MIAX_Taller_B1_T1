@@ -83,14 +83,28 @@ class SimulationResult:
         ax.legend()
         return ax
 
-    def plot_distribution(self, bins: int = 50, ax: plt.Axes | None = None) -> plt.Axes:
-        """Histogram of final values, with the initial value as reference."""
+    def plot_distribution(
+        self, bins: int = 50, var_level: float | None = 5, ax: plt.Axes | None = None
+    ) -> plt.Axes:
+        """Histogram of final values, with the initial value and the VaR marked.
+
+        var_level is the percentile used for the VaR (5 -> VaR 95 %); None hides it.
+        """
         if ax is None:
             _, ax = plt.subplots(figsize=(10, 5))
         ax.hist(self.final_values, bins=bins, color="tab:blue", alpha=0.7)
         ax.axvline(
             self.config.initial_value, color="black", ls="--", label="Initial value"
         )
+        if var_level is not None:
+            threshold = np.percentile(self.final_values, var_level)
+            loss = self.value_at_risk(var_level)
+            ax.axvline(
+                threshold,
+                color="tab:red",
+                ls="--",
+                label=f"VaR {100 - var_level:g} %: loss of {loss:.1%}",
+            )
         ax.set(title="Final value distribution", xlabel="Value", ylabel="Simulations")
         ax.legend()
         return ax
