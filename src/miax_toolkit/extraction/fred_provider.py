@@ -32,6 +32,10 @@ class FredProvider(MacroProvider):
             raise ValueError(f"FRED returned no data for '{series_id}'")
         values.name = series_id
 
+        missing = [key for key in ("title", "units", "realtime_end") if key not in info]
+        if missing:
+            raise ValueError(f"FRED metadata for '{series_id}' is missing {missing}")
+
         return MacroSeries(
             series_id=series_id,
             name=info["title"],

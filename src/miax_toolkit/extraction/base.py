@@ -5,8 +5,10 @@ import pandas as pd
 
 from miax_toolkit.models import MacroSeries, PriceSeries
 
-# Errors that get_many records per ticker; any other error is a bug and stops it.
-DOWNLOAD_ERRORS = (ValueError, TypeError, KeyError, OSError)
+# Errors that get_many records per ticker: bad or missing source data
+# (ValueError) and network failures (OSError, which includes requests
+# exceptions). Anything else is a bug and stops the batch.
+DOWNLOAD_ERRORS = (ValueError, OSError)
 
 
 class PriceProvider(ABC):
@@ -17,8 +19,12 @@ class PriceProvider(ABC):
     def get_prices(self, ticker: str, start: date, end: date) -> PriceSeries:
         """Daily prices for one ticker between start and end (both inclusive)."""
         validate_dates(start, end)
+        if not isinstance(ticker, str):
+            raise TypeError(f"ticker must be a str, not {type(ticker).__name__}")
         if not ticker.strip():
             raise ValueError("ticker must not be empty")
+        if ticker != ticker.strip():
+            raise ValueError(f"ticker {ticker!r} has leading or trailing whitespace")
         return self._fetch_prices(ticker, start, end)
 
     def get_many(
@@ -28,6 +34,11 @@ class PriceProvider(ABC):
         validate_dates(start, end)
         if isinstance(tickers, str):
             raise TypeError("tickers must be a list, e.g. ['AAPL'], not a string")
+        tickers = list(tickers)  # also lets a generator be checked and then iterated
+        not_str = [ticker for ticker in tickers if not isinstance(ticker, str)]
+        if not_str:
+            # Checked up front so a bad list fails before any request is sent.
+            raise TypeError(f"every ticker must be a str; got {not_str!r}")
         series = {}
         errors = {}
         for ticker in tickers:
@@ -56,8 +67,14 @@ class MacroProvider(ABC):
         reliably; use None for data without a currency (e.g. inflation index).
         """
         validate_dates(start, end)
+        if not isinstance(series_id, str):
+            raise TypeError(f"series_id must be a str, not {type(series_id).__name__}")
         if not series_id.strip():
             raise ValueError("series_id must not be empty")
+        if series_id != series_id.strip():
+            raise ValueError(
+                f"series_id {series_id!r} has leading or trailing whitespace"
+            )
         return self._fetch_series(series_id, start, end, currency=currency)
 
     def get_many(
@@ -67,6 +84,13 @@ class MacroProvider(ABC):
         validate_dates(start, end)
         if isinstance(series_ids, str):
             raise TypeError("series_ids must be a list, e.g. ['DTB3'], not a string")
+        series_ids = list(series_ids)  # also lets a generator be checked and iterated
+        not_str = [
+            series_id for series_id in series_ids if not isinstance(series_id, str)
+        ]
+        if not_str:
+            # Checked up front so a bad list fails before any request is sent.
+            raise TypeError(f"every series_id must be a str; got {not_str!r}")
         series = {}
         errors = {}
         for series_id in series_ids:

@@ -41,15 +41,22 @@ class YFinanceProvider(PriceProvider):
                 f"'{ticker}' is of type '{instrument_type}'; "
                 f"supported types are {sorted(_ASSET_TYPES)}"
             )
-        prices = history[_PRICE_COLUMNS[self.price_type]].dropna()
+        column = _PRICE_COLUMNS[self.price_type]
+        if column not in history.columns:
+            raise ValueError(f"yfinance returned no '{column}' column for '{ticker}'")
+        prices = history[column].dropna()
         prices.index = to_naive_dates(prices.index)
         prices.name = ticker
+
+        currency = metadata.get("currency")
+        if not currency:
+            raise ValueError(f"yfinance reported no currency for '{ticker}'")
 
         return PriceSeries(
             ticker=ticker,
             name=metadata.get("longName") or metadata.get("shortName") or ticker,
             asset_type=_ASSET_TYPES[instrument_type],
-            currency=metadata["currency"],
+            currency=currency,
             source=self.source,
             prices=prices,
             price_type=self.price_type,

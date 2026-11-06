@@ -62,7 +62,10 @@ class TiingoProvider(PriceProvider):
             raise ValueError(f"Tiingo returned no data for '{ticker}'") from None
 
         # Rows without a price are dropped, never filled.
-        prices = history[_PRICE_COLUMNS[self.price_type]].dropna()
+        column = _PRICE_COLUMNS[self.price_type]
+        if column not in history.columns:
+            raise ValueError(f"Tiingo returned no '{column}' column for '{ticker}'")
+        prices = history[column].dropna()
         prices.index = to_naive_dates(prices.index)
         prices.name = ticker
 
