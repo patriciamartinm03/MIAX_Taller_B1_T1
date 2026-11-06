@@ -155,12 +155,12 @@ class Portfolio:
                 f"benchmark must be a Portfolio, got {type(benchmark).__name__}"
             )
 
-    def _benchmark_on_common_dates(
+    def _common_dates_with_benchmark(
         self, benchmark: "Portfolio"
-    ) -> tuple[pd.Series, pd.Series]:
+    ) -> tuple[pd.Series, pd.Series, pd.Series, pd.Series]:
         self._check_benchmark(benchmark)
-        benchmark_value = benchmark.value()
-        common = benchmark_value.index.intersection(self.prices.index).sort_values()
+        own_value, benchmark_value = self.value(), benchmark.value()
+        common = own_value.index.intersection(benchmark_value.index).sort_values()
         if len(common) < 3:
             own_dates, benchmark_dates = self.prices.index, benchmark.prices.index
             raise ValueError(
@@ -170,8 +170,64 @@ class Portfolio:
                 f"benchmark: {benchmark_dates[0].date()} to "
                 f"{benchmark_dates[-1].date()}"
             )
-        value = benchmark_value.loc[common]
-        return value, metrics.daily_returns(value)
+        own_value, benchmark_value = own_value.loc[common], benchmark_value.loc[common]
+        return (
+            own_value,
+            metrics.daily_returns(own_value),
+            benchmark_value,
+            metrics.daily_returns(benchmark_value),
+        )
+
+    def _benchmark_on_common_dates(
+        self, benchmark: "Portfolio"
+    ) -> tuple[pd.Series, pd.Series]:
+        _, _, benchmark_value, benchmark_returns = self._common_dates_with_benchmark(
+            benchmark
+        )
+        return benchmark_value, benchmark_returns
+
+    def benchmark_issues(self, benchmark: "Portfolio") -> list[str]:
+        self._check_benchmark(benchmark)
+        issues = []
+        own_type, benchmark_type = (
+            self.assets[0].price_type,
+            benchmark.assets[0].price_type,
+        )
+        if benchmark_type != own_type:
+            issues.append(
+                f"benchmark '{benchmark.name}' uses price_type '{benchmark_type}' "
+                f"but portfolio '{self.name}' uses '{own_type}'"
+            )
+        own_dates, benchmark_dates = self.prices.index, benchmark.prices.index
+        if benchmark_dates[0] > own_dates[0]:
+            issues.append(
+                f"benchmark '{benchmark.name}' starts on {benchmark_dates[0].date()}, "
+                f"after portfolio '{self.name}' ({own_dates[0].date()})"
+            )
+        if benchmark_dates[-1] < own_dates[-1]:
+            issues.append(
+                f"benchmark '{benchmark.name}' ends on {benchmark_dates[-1].date()}, "
+                f"before portfolio '{self.name}' ({own_dates[-1].date()})"
+            )
+        return issues
+
+    def benchmark_comparison(self, benchmark: "Portfolio") -> pd.Series:
+        own_value, own_returns, benchmark_value, benchmark_returns = (
+            self._common_dates_with_benchmark(benchmark)
+        )
+        risk_free = self.risk_free_daily()
+        comparison = {
+            "cagr_difference": metrics.cagr(own_value) - metrics.cagr(benchmark_value),
+            "volatility_difference": metrics.annual_volatility(own_returns)
+            - metrics.annual_volatility(benchmark_returns),
+            "sharpe_difference": metrics.sharpe_ratio(own_returns, risk_free)
+            - metrics.sharpe_ratio(benchmark_returns, risk_free),
+            "tracking_error": metrics.tracking_error(own_returns, benchmark_returns),
+            "information_ratio": metrics.information_ratio(
+                own_returns, benchmark_returns
+            ),
+        }
+        return pd.Series(comparison, name=benchmark.name)
 
     def benchmark_overlap(self, benchmark: "Portfolio") -> pd.DataFrame:
         self._check_benchmark(benchmark)
