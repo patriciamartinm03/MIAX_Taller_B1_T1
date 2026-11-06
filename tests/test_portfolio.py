@@ -113,6 +113,12 @@ def test_risk_free_daily_has_same_dates_as_asset_returns():
     assert daily.iloc[-1] == pytest.approx(0.036 / 252)
 
 
+def test_risk_free_with_a_single_rate_applies_it_to_every_date():
+    rate = make_rate([3.0], pd.to_datetime(["2026-01-01"]))
+    portfolio = Portfolio("Test", [SPX], [1.0], rate)
+    assert portfolio.risk_free_daily().tolist() == pytest.approx([0.030 / 252] * 4)
+
+
 def test_risk_free_daily_without_risk_free_is_zero():
     assert Portfolio("Test", [SPX], [1.0]).risk_free_daily() == 0.0
 
