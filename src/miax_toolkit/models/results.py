@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,13 +21,31 @@ class SimulationConfig:
 
 @dataclass
 class SimulationResult:
-    paths: np.ndarray
+    """Simulated portfolio paths, with the settings and assumptions that produced them.
+
+    mu and cov are the DAILY assumptions used in the simulation (optional).
+    """
+
+    paths: np.ndarray = field(repr=False)
     config: SimulationConfig
+    rebalance: bool = True
+    mu: np.ndarray | None = field(default=None, repr=False)
+    cov: np.ndarray | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         expected = (self.config.n_sims, self.config.horizon_days + 1)
         if self.paths.shape != expected:
             raise ValueError(f"paths must have shape {expected}")
+
+        if (self.mu is None) != (self.cov is None):
+            raise ValueError("mu and cov must be given together")
+        if self.mu is not None:
+            self.mu = np.asarray(self.mu, dtype=float)
+            self.cov = np.asarray(self.cov, dtype=float)
+            if self.mu.ndim != 1:
+                raise ValueError("mu must be a 1D array")
+            if self.cov.shape != (self.mu.size, self.mu.size):
+                raise ValueError("cov must be a square matrix with one row per asset")
 
     @property
     def final_values(self) -> np.ndarray:
