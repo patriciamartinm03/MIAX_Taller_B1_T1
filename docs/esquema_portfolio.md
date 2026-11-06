@@ -19,14 +19,40 @@ Para decidir dónde va algo:
 
 Las importaciones van en una sola dirección: `Portfolio` importa de `metrics.py` y de `reporting`, y `reporting` no importa `Portfolio`: recibe la cartera como parámetro y usa sus métodos. Si los dos se importaran mutuamente, Python daría error al cargarlos.
 
-_Actualizado: 5 de noviembre de 2026._
+_Actualizado: 6 de noviembre de 2026._
 
 ---
 
 ## Hecho
 
+### En `metrics.py`
+
+**Validaciones comunes**
+- [x] Validación de una serie (con fechas o sin ellas, solo positiva si hace falta) y de un número.
+
+**Piezas básicas**
+- [x] Rendimientos diarios, de una serie o de una tabla con varios activos (`daily_returns`).
+- [x] Rentabilidad total (`total_return`).
+- [x] Valor acumulado a partir de rendimientos, empezando en un valor inicial (`cumulative_value`).
+- [x] Serie de drawdown (`drawdown_series`).
+- [x] Anualizar una media diaria y una desviación diaria (`annualize_mean`, `annualize_volatility`).
+- [x] Exceso de rentabilidad diario sobre el tipo sin riesgo, constante o día a día (`excess_returns`).
+- [x] Diferencia diaria entre la cartera y el índice, en las fechas comunes (`active_returns`).
+
+**Métricas**
+- [x] Rentabilidad y volatilidad anuales, usando las funciones de anualizar (`annual_return`, `annual_volatility`).
+- [x] CAGR con días naturales (`cagr`).
+- [x] Drawdown máximo, usando la serie de drawdown (`max_drawdown`), y con fechas de pico, valle y recuperación (`max_drawdown_details`).
+- [x] Paso del tipo sin riesgo anual a diario, en unas fechas dadas (`daily_risk_free`).
+- [x] Sharpe y Sortino sobre el exceso de rentabilidad diario.
+- [x] Tracking error e Information Ratio.
+- [x] Número efectivo de activos.
+- [x] Probabilidad de pérdida, VaR y CVaR (`prob_loss`, `value_at_risk`, `expected_shortfall`).
+
+### En `Portfolio`
+
 **Datos de la cartera**
-- [x] Recibe un nombre, una lista de activos y sus pesos.
+- [x] Recibe un nombre, una lista de activos, sus pesos y, si se quiere, el tipo sin riesgo.
 - [x] Pasa todos los precios a dólares (cada activo sabe convertirse, opción C) y se queda solo con las fechas comunes.
 
 **Validaciones al crear la cartera**
@@ -34,115 +60,68 @@ _Actualizado: 5 de noviembre de 2026._
 - [x] Tantos pesos como activos.
 - [x] Sin activos repetidos.
 - [x] Todos los activos con el mismo tipo de precio (con o sin ajuste por dividendos).
+- [x] Todos los pesos son números finitos, y el mensaje dice qué activo falla.
 - [x] Sin pesos negativos.
 - [x] Los pesos suman 1.
-- [x] Al menos 3 fechas comunes.
+- [x] Al menos 3 fechas comunes; si no, el mensaje dice desde y hasta cuándo tiene datos cada activo.
+- [x] Tipo sin riesgo: que sea un `MacroSeries`, en dólares, en porcentaje o decimal, y que empiece antes que la cartera.
 
-**Cálculos en `Portfolio`**
-- [x] Rendimientos diarios de cada activo.
-- [x] Rendimientos diarios de la cartera (con pesos constantes).
-- [x] Simulación Monte Carlo, con supuestos históricos o introducidos a mano.
+**Tipo sin riesgo**
+- [x] Tipo diario de cada fecha de la cartera, o 0 si no se ha pasado (`risk_free_daily`).
+- [x] Tipo medio anual del periodo de la cartera (`risk_free_mean`).
 
-**En `metrics.py`**
-- [x] Validación de una serie con fechas.
-- [x] Rendimientos diarios.
-- [x] Rentabilidad anual (media diaria × 252).
-- [x] Volatilidad anual (desviación diaria × √252).
-- [x] Drawdown máximo (solo el número, sin fechas).
+**Rendimientos**
+- [x] Rendimientos diarios de cada activo, con `metrics.daily_returns` (`asset_returns`).
+- [x] Rendimientos diarios de la cartera, con pesos constantes (`returns`).
 
-**Tests**
-- [x] De la conversión a dólares y de la cartera (en la rama `patricia-tests`).
+**Composición**
+- [x] Exposición por divisa (`currency_exposure`).
+- [x] Número efectivo de activos (`effective_n_assets`).
 
----
+**Rendimiento y riesgo**
+- [x] Valor histórico de la cartera, con y sin rebalanceo (`value`).
+- [x] Fechas del drawdown máximo de la cartera (`drawdown_details`).
+- [x] Tabla de métricas: una fila por activo, otra para la cartera y otra para el índice si lo hay, en dólares y en las fechas comunes (`metrics_table`).
+- [x] Efecto del tipo de cambio de cada activo que no está en dólares (`currency_attribution`).
 
-## Falta en `metrics.py`
+**Índice de referencia**
+- [x] Comparación con el índice: diferencias de CAGR, volatilidad y Sharpe, tracking error e Information Ratio, en las fechas comunes (`benchmark_comparison`).
+- [x] Detectar si el índice no es adecuado (otro tipo de precio o no cubre todo el periodo), sin dar error (`benchmark_issues`).
+- [x] Posiciones en común con el índice (`benchmark_overlap`, `benchmark_overlap_share`).
 
-**Piezas básicas** (las usan varias métricas y la cartera):
-- [ ] Rentabilidad total de una serie (último / primero − 1). La usan el CAGR, la cartera, el índice de referencia y el efecto del tipo de cambio.
-- [ ] Valor acumulado a partir de rendimientos, empezando en un valor inicial. Lo usan el valor histórico de la cartera y el del índice de referencia.
-- [ ] Serie de drawdown (caída desde el máximo en cada fecha). La usan el drawdown máximo y sus fechas.
-- [ ] Anualizar una media diaria y una desviación diaria. Las usan la rentabilidad anual, la volatilidad anual y los supuestos de la simulación.
-- [ ] Exceso de rentabilidad diario sobre el tipo sin riesgo. Lo usan el Sharpe y el Sortino.
-- [ ] Diferencia diaria entre la cartera y el índice, en las fechas comunes. La usan el tracking error y el Information Ratio.
+**Diversificación**
+- [x] Matriz de correlaciones (`correlation`).
+- [x] Beneficio de la diversificación (`diversification_benefit`).
 
-**Métricas:**
-- [ ] CAGR con días naturales.
-- [ ] Drawdown máximo con fechas de pico, valle y recuperación.
-- [ ] Paso del tipo sin riesgo anual a diario, en unas fechas dadas.
-- [ ] Sharpe sobre el exceso de rentabilidad diario.
-- [ ] Sortino sobre el mismo exceso.
-- [ ] Tracking error e Information Ratio.
-- [ ] Número efectivo de activos.
-- [ ] Probabilidad de pérdida, VaR y CVaR.
+**Simulación**
+- [x] Simulación Monte Carlo, con supuestos históricos o introducidos a mano, y con o sin rebalanceo (`monte_carlo`).
+- [x] Validación de `mu` y `cov` introducidos a mano: un valor por activo, finitos, sin varianzas negativas y sin valores que parezcan anuales.
+- [x] Supuestos usados, anualizados: rentabilidad y volatilidad de cada activo (`simulation_assumptions`).
 
-**Arreglar lo que ya hay para no repetir fórmulas:**
-- [ ] Que la rentabilidad y la volatilidad anuales usen las funciones de anualizar.
-- [ ] Que el drawdown máximo use la serie de drawdown.
+### Tests
+- [x] De `metrics.py` y de todo lo anterior de `Portfolio` (en la rama `patricia-tests`).
 
 ---
 
-## Falta en `Portfolio`
+## Pendiente
 
-### Validaciones nuevas
-- [ ] Que todos los pesos sean números válidos (ahora un peso vacío da un mensaje que despista).
-- [ ] Que el mensaje de «pocas fechas comunes» diga desde cuándo tiene datos cada activo, para ver cuál recorta el periodo.
-- [ ] Tipo sin riesgo: que esté en dólares, en porcentaje o decimal, y que cubra todo el periodo de la cartera.
-
-### Reutilizar `metrics.py`
-- [ ] Que los rendimientos de cada activo llamen a los rendimientos diarios de `metrics.py` en vez de repetir la fórmula.
-
-### Tipo sin riesgo
-- [ ] Que la cartera pueda recibir el tipo sin riesgo (letra del Tesoro a 3 meses de la FRED).
-- [ ] Que dé el tipo diario de cada fecha de la cartera, o 0 si no se ha pasado.
-
-### Composición
-- [ ] Exposición por divisa: qué parte de la cartera está en cada divisa original.
-- [ ] Número efectivo de activos de la cartera.
-
-### Rendimiento y riesgo
-- [ ] Valor histórico de la cartera, con y sin rebalanceo.
-- [ ] Tabla de métricas: una fila por activo, otra para la cartera y otra para el índice de referencia si lo hay. Columnas: rentabilidad anual, CAGR, volatilidad, Sharpe, Sortino y drawdown máximo. Todo en dólares y en las fechas comunes.
-- [ ] Fechas del drawdown máximo de la cartera.
-- [ ] Efecto del tipo de cambio de cada activo que no está en dólares: rentabilidad en su divisa, variación del tipo de cambio y rentabilidad en dólares, en las fechas comunes.
-
-### Índice de referencia
-- [ ] Comparación con el índice: diferencias de CAGR, volatilidad y Sharpe, tracking error e Information Ratio, en las fechas comunes.
-- [ ] Detectar si el índice no es adecuado (otro tipo de precio o no cubre todo el periodo), sin dar error, para que el report lo pueda avisar.
-
-### Diversificación
-- [ ] Matriz de correlaciones.
-- [ ] Beneficio de la diversificación: media ponderada de las volatilidades de los activos menos la volatilidad de la cartera.
-
-### Simulación
-- [ ] Supuestos usados, anualizados: rentabilidad y volatilidad de cada activo.
-
-### Conexión con `reporting`
+### En `Portfolio`
 - [ ] `report()` y `plots_report()` como métodos de la cartera (lo pide el enunciado), que solo pasan los datos a `reporting`.
+
+### En el resultado de la simulación (`models/results.py`, hay que hablarlo con el grupo)
+- [ ] Que guarde el tipo de rebalanceo usado.
+- [ ] Que guarde los supuestos usados (`mu` y `cov` diarios), para que la cartera pueda anualizarlos a partir del resultado.
+- [ ] Que tenga el CVaR, y que calcule la probabilidad de pérdida, el VaR y el CVaR con las funciones de `metrics.py` en vez de repetir las fórmulas.
 
 ### Tests
 - [ ] De cada punto anterior, en `patricia-tests`.
 
 ---
 
-## Pendiente
-
-- [ ] Confirmar la opción C (tipo de cambio dentro de cada activo).
-- [ ] Decidir si se incluye el índice de referencia.
-- [ ] Que el resultado de la simulación guarde el tipo de rebalanceo y los supuestos usados, para que la cartera pueda anualizarlos.
-- [ ] Que el resultado de la simulación use la probabilidad de pérdida, el VaR y el CVaR de `metrics.py`.
-- [ ] Decidir si se pasa a rebalanceo periódico (mensual o trimestral) en vez de diario. Si se hace, el valor histórico de la cartera debería usar el mismo.
-
----
-
 ## Orden
 
-1. `metrics.py`: piezas básicas, métricas nuevas y arreglos.
-2. Validaciones nuevas, reutilizar `metrics.py` y tipo sin riesgo.
-3. Composición y valor histórico.
-4. Tabla de métricas, fechas del drawdown y efecto del tipo de cambio.
-5. Índice de referencia.
-6. Diversificación.
-7. Supuestos de la simulación (cuando el resultado de la simulación guarde los supuestos).
-8. Conexión con `reporting`.
+1. Resultado de la simulación: rebalanceo, `mu`, `cov` y CVaR (después de acordarlo con el grupo).
+2. Que los supuestos de la simulación se puedan sacar del resultado.
+3. Conexión con `reporting`: `report()` y `plots_report()`.
 
 Después de cada paso: commit del código, commit de los tests y comprobar que todo pasa.
