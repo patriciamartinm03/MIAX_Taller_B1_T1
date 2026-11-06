@@ -111,3 +111,69 @@ def test_risk_free_daily_has_same_dates_as_asset_returns():
 
 def test_risk_free_daily_without_risk_free_is_zero():
     assert Portfolio("Test", [SPX], [1.0]).risk_free_daily() == 0.0
+
+
+def test_weights_follow_tickers_not_alphabetical_order():
+    zzz = make_series("ZZZ", "USD", [100, 110, 121, 133.1, 146.41])
+    aaa = make_series("AAA", "USD", [100, 100, 100, 100, 100])
+    portfolio = Portfolio("Test", [zzz, aaa], [0.8, 0.2])
+
+    assert portfolio.returns().tolist() == pytest.approx([0.08] * 4)
+    final = portfolio.value(rebalance=False).iloc[-1]
+    assert final == pytest.approx(100 * (0.8 * 1.4641 + 0.2 * 1.0))
+
+
+def test_risk_free_mean_weights_each_rate_by_its_days():
+    rate = make_rate([3.0, 3.6], RATE_DATES)
+    portfolio = Portfolio("Test", [SPX], [1.0], rate)
+    # Return dates: Jan 6 at 3 %, Jan 7, 8 and 9 at 3.6 %
+    assert portfolio.risk_free_mean() == pytest.approx((0.030 + 3 * 0.036) / 4)
+
+
+def test_risk_free_mean_without_risk_free_is_zero():
+    assert Portfolio("Test", [SPX], [1.0]).risk_free_mean() == 0.0
+
+
+def test_currency_exposure_adds_weights_by_currency():
+    fx = pd.Series([1.10] * 5, index=DATES)
+    ibex = make_series("IBEX", "EUR", [100, 101, 99, 102, 103], fx)
+    portfolio = Portfolio("Test", [SPX, ibex], [0.6, 0.4])
+    exposure = portfolio.currency_exposure()
+    assert exposure.index.tolist() == ["USD", "EUR"]
+    assert exposure.tolist() == pytest.approx([0.6, 0.4])
+
+
+def test_value_starts_at_initial_value_with_and_without_rebalancing():
+    other = make_series("NDX", "USD", [100, 98, 103, 101, 106])
+    portfolio = Portfolio("My portfolio", [SPX, other], [0.5, 0.5])
+    for rebalance in (True, False):
+        values = portfolio.value(initial_value=250.0, rebalance=rebalance)
+        assert values.index[0] == DATES[0]
+        assert values.iloc[0] == pytest.approx(250.0)
+        assert values.name == "My portfolio"
+
+
+def test_value_of_one_asset_is_its_normalized_price():
+    portfolio = Portfolio("Test", [SPX], [1.0])
+    expected = (SPX.prices / SPX.prices.iloc[0] * 100).tolist()
+    assert portfolio.value(rebalance=True).tolist() == pytest.approx(expected)
+    assert portfolio.value(rebalance=False).tolist() == pytest.approx(expected)
+
+
+def test_diversification_benefit_is_zero_with_one_asset():
+    portfolio = Portfolio("Test", [SPX], [1.0])
+    assert portfolio.diversification_benefit() == pytest.approx(0, abs=1e-12)
+
+
+def test_diversification_benefit_is_positive_with_uncorrelated_assets():
+    up_down = make_series("A", "USD", [100, 110, 99, 108.9, 98.01])
+    two_up_two_down = make_series("B", "USD", [100, 105, 110.25, 104.7375, 99.500625])
+    portfolio = Portfolio("Test", [up_down, two_up_two_down], [0.5, 0.5])
+    assert portfolio.correlation().loc["A", "B"] == pytest.approx(0, abs=1e-9)
+    assert portfolio.diversification_benefit() > 0
+
+
+def test_correlation_has_ones_on_the_diagonal():
+    other = make_series("NDX", "USD", [100, 98, 103, 101, 106])
+    correlation = Portfolio("Test", [SPX, other], [0.5, 0.5]).correlation()
+    assert correlation.to_numpy().diagonal().tolist() == pytest.approx([1.0, 1.0])
