@@ -506,7 +506,8 @@ def test_simulation_assumptions_annualize_given_inputs():
 
 
 def test_monte_carlo_default_equals_historical_inputs_by_hand():
-    # Small daily moves, so the historical inputs pass the "looks annual" checks
+    # Small daily moves: passed by hand, the historical inputs go through the
+    # "looks annual" checks, which only apply to inputs given by the user
     assets = [
         make_series("SPY", "USD", [100, 100.5, 100.2, 100.6, 100.9]),
         make_series("FEZ", "USD", [50, 49.8, 50.1, 50.3, 50.2]),
@@ -520,6 +521,38 @@ def test_monte_carlo_default_equals_historical_inputs_by_hand():
         config, asset_returns.mean().to_numpy(), asset_returns.cov().to_numpy()
     )
     np.testing.assert_array_equal(default.paths, by_hand.paths)
+
+
+def test_monte_carlo_without_rebalance_differs_from_rebalance():
+    portfolio = make_usd_portfolio("My portfolio", THREE_ASSETS)
+    config = SimulationConfig(n_sims=50, horizon_days=10, seed=7)
+    rebalanced = portfolio.monte_carlo(config, DAILY_MU, DAILY_COV, rebalance=True)
+    buy_and_hold = portfolio.monte_carlo(config, DAILY_MU, DAILY_COV, rebalance=False)
+    assert buy_and_hold.paths.shape == (50, 11)
+    assert (buy_and_hold.paths[:, 0] == config.initial_value).all()
+    assert (buy_and_hold.paths > 0).all()
+    # Same simulated returns, so both agree after one day and drift apart later
+    np.testing.assert_allclose(buy_and_hold.paths[:, 1], rebalanced.paths[:, 1])
+    assert not np.allclose(buy_and_hold.paths, rebalanced.paths)
+
+
+def test_monte_carlo_same_seed_gives_same_paths():
+    portfolio = make_usd_portfolio("My portfolio", THREE_ASSETS)
+    config = SimulationConfig(n_sims=50, horizon_days=10, seed=7)
+    first = portfolio.monte_carlo(config, DAILY_MU, DAILY_COV)
+    second = portfolio.monte_carlo(config, DAILY_MU, DAILY_COV)
+    np.testing.assert_array_equal(first.paths, second.paths)
+
+
+def test_monte_carlo_different_seed_gives_different_paths():
+    portfolio = make_usd_portfolio("My portfolio", THREE_ASSETS)
+    first = portfolio.monte_carlo(
+        SimulationConfig(n_sims=50, horizon_days=10, seed=7), DAILY_MU, DAILY_COV
+    )
+    second = portfolio.monte_carlo(
+        SimulationConfig(n_sims=50, horizon_days=10, seed=8), DAILY_MU, DAILY_COV
+    )
+    assert not np.allclose(first.paths, second.paths)
 
 
 def test_mu_with_wrong_length_shows_both_counts():
