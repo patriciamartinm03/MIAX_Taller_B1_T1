@@ -164,6 +164,7 @@ def annual_volatility(returns: pd.Series) -> float:
 
 
 def cagr(values: pd.Series) -> float:
+    """Compound annual growth rate, using calendar days (365.25 per year)."""
     _check_series(values, "values", dated=True, positive=True)
     calendar_days = (values.index[-1] - values.index[0]).days
     return float((1 + total_return(values)) ** (365.25 / calendar_days) - 1)
@@ -199,6 +200,7 @@ def max_drawdown_details(values: pd.Series) -> DrawdownDetails:
 
 
 def daily_risk_free(annual_rates: pd.Series, dates: pd.DatetimeIndex) -> pd.Series:
+    """Annual rates / 252 (TRADING_DAYS), forward-filled onto the given dates."""
     _check_series(annual_rates, "annual_rates", dated=True, min_values=1)
     if not isinstance(dates, pd.DatetimeIndex) or len(dates) == 0:
         raise TypeError("dates must be a non-empty pandas DatetimeIndex")

@@ -147,6 +147,7 @@ class Portfolio:
     # Historical value
 
     def value(self, initial_value: float = 100.0, rebalance: bool = True) -> pd.Series:
+        """rebalance=True resets weights daily; False is buy and hold."""
         if rebalance:
             values = metrics.cumulative_value(
                 self.returns(), self.prices.index[0], initial_value
@@ -384,6 +385,7 @@ class Portfolio:
     def simulation_assumptions(
         self, mu: np.ndarray | None = None, cov: np.ndarray | None = None
     ) -> pd.DataFrame:
+        """Annual return and volatility from DAILY mu and cov, given in asset order."""
         mu, cov = self._simulation_inputs(mu, cov)
         return pd.DataFrame(
             {
