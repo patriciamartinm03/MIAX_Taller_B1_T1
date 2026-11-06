@@ -80,14 +80,56 @@ class Portfolio:
                 f"not '{self.risk_free.units}'"
             )
 
+    def _weights_by_ticker(self) -> pd.Series:
+        return pd.Series(self.weights, index=[asset.ticker for asset in self.assets])
+
     def risk_free_daily(self) -> pd.Series | float:
         return 0.0 if self._risk_free_daily is None else self._risk_free_daily
+
+    def risk_free_mean(self) -> float:
+        if self._risk_free_daily is None:
+            return 0.0
+        return float(metrics.annualize_mean(float(self._risk_free_daily.mean())))
+
+    def currency_exposure(self) -> pd.Series:
+        currencies = {asset.ticker: asset.currency for asset in self.assets}
+        exposure = self._weights_by_ticker().groupby(currencies).sum()
+        return exposure.rename_axis("currency").sort_values(ascending=False)
+
+    def effective_n_assets(self) -> float:
+        return metrics.effective_n_assets(self.weights)
 
     def asset_returns(self) -> pd.DataFrame:
         return metrics.daily_returns(self.prices)
 
     def returns(self) -> pd.Series:
-        return self.asset_returns() @ np.array(self.weights)
+        return self.asset_returns() @ self._weights_by_ticker()
+
+    def value(self, initial_value: float = 100.0, rebalance: bool = True) -> pd.Series:
+        if rebalance:
+            values = metrics.cumulative_value(
+                self.returns(), self.prices.index[0], initial_value
+            )
+        else:
+            normalized = self.prices / self.prices.iloc[0]
+            values = (normalized * self._weights_by_ticker()).sum(
+                axis=1
+            ) * initial_value
+        return values.rename(self.name)
+
+    def drawdown_details(self) -> metrics.DrawdownDetails:
+        return metrics.max_drawdown_details(self.value())
+
+    def correlation(self) -> pd.DataFrame:
+        return self.asset_returns().corr()
+
+    def diversification_benefit(self) -> float:
+        asset_returns = self.asset_returns()
+        asset_volatilities = asset_returns.apply(metrics.annual_volatility)
+        weighted_volatility = float(
+            (self._weights_by_ticker() * asset_volatilities).sum()
+        )
+        return weighted_volatility - metrics.annual_volatility(self.returns())
 
     def monte_carlo(
         self,
@@ -104,7 +146,6 @@ class Portfolio:
         simulated = simulate_returns(
             mu, cov, config.n_sims, config.horizon_days, config.seed
         )
-        paths = returns_to_paths(
-            simulated, self.weights, config.initial_value, rebalance
-        )
+        weights = self._weights_by_ticker().reindex(asset_returns.columns).to_numpy()
+        paths = returns_to_paths(simulated, weights, config.initial_value, rebalance)
         return SimulationResult(paths, config)
