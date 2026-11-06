@@ -53,15 +53,10 @@ class TiingoProvider(PriceProvider):
                 frequency="daily",
             )
         except RestClientError as error:
-            # An unknown ticker comes back as an HTTP 404 wrapped in
-            # RestClientError. Converted to ValueError so get_many records it
-            # for this ticker and carries on with the rest.
             raise ValueError(f"Tiingo request for '{ticker}' failed: {error}") from None
         except KeyError:
-            # The tiingo client raises KeyError('date') when the range is empty.
             raise ValueError(f"Tiingo returned no data for '{ticker}'") from None
 
-        # Rows without a price are dropped, never filled.
         column = _PRICE_COLUMNS[self.price_type]
         if column not in history.columns:
             raise ValueError(f"Tiingo returned no '{column}' column for '{ticker}'")

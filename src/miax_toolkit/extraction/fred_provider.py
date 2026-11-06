@@ -24,9 +24,6 @@ class FredProvider(MacroProvider):
             series_id, observation_start=start, observation_end=end
         )
 
-        # FRED marks missing values with "." and fredapi turns them into NaN.
-        # They are dropped, not filled: forward-filling rates is a
-        # preprocessing decision, done when aligning with prices.
         values = values.dropna()
         if values.empty:
             raise ValueError(f"FRED returned no data for '{series_id}'")

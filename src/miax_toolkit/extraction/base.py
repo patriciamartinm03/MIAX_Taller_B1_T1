@@ -5,9 +5,6 @@ import pandas as pd
 
 from miax_toolkit.models import MacroSeries, PriceSeries
 
-# Errors that get_many records per ticker: bad or missing source data
-# (ValueError) and network failures (OSError, which includes requests
-# exceptions). Anything else is a bug and stops the batch.
 DOWNLOAD_ERRORS = (ValueError, OSError)
 
 
@@ -37,7 +34,6 @@ class PriceProvider(ABC):
         tickers = list(tickers)  # also lets a generator be checked and then iterated
         not_str = [ticker for ticker in tickers if not isinstance(ticker, str)]
         if not_str:
-            # Checked up front so a bad list fails before any request is sent.
             raise TypeError(f"every ticker must be a str; got {not_str!r}")
         series = {}
         errors = {}
@@ -84,12 +80,11 @@ class MacroProvider(ABC):
         validate_dates(start, end)
         if isinstance(series_ids, str):
             raise TypeError("series_ids must be a list, e.g. ['DTB3'], not a string")
-        series_ids = list(series_ids)  # also lets a generator be checked and iterated
+        series_ids = list(series_ids)
         not_str = [
             series_id for series_id in series_ids if not isinstance(series_id, str)
         ]
         if not_str:
-            # Checked up front so a bad list fails before any request is sent.
             raise TypeError(f"every series_id must be a str; got {not_str!r}")
         series = {}
         errors = {}
