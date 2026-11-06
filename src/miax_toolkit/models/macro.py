@@ -48,6 +48,9 @@ class MacroSeries:
                 "a rate above 50 % is unrealistic, so these look like percentages (use units='percent')"
             )
 
+        if self.currency is not None:
+            self.currency = self.currency.upper()
+
         self.values = self.values.sort_index()
 
         self.mean = float(self.values.mean())
