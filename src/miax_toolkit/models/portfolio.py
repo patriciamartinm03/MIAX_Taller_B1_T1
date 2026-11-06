@@ -410,12 +410,12 @@ class Portfolio:
         rebalance: bool = True,
     ) -> SimulationResult:
         config = SimulationConfig() if config is None else config
-        asset_returns = self.asset_returns()
         mu, cov = self._simulation_inputs(mu, cov)
 
         simulated = simulate_returns(
             mu, cov, config.n_sims, config.horizon_days, config.seed
         )
-        weights = self._weights_by_ticker().reindex(asset_returns.columns).to_numpy()
+        # Same columns, in the same order, as the returns behind mu and cov
+        weights = self._weights_by_ticker().reindex(self.prices.columns).to_numpy()
         paths = returns_to_paths(simulated, weights, config.initial_value, rebalance)
         return SimulationResult(paths, config)
