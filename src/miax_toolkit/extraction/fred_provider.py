@@ -28,6 +28,7 @@ class FredProvider(MacroProvider):
         if values.empty:
             raise ValueError(f"FRED returned no data for '{series_id}'")
         values.name = series_id
+        values.index = values.index.normalize().as_unit("ns")  # same format as prices
 
         missing = [key for key in ("title", "units", "realtime_end") if key not in info]
         if missing:

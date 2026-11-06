@@ -32,9 +32,15 @@ class PriceProvider(ABC):
         if isinstance(tickers, str):
             raise TypeError("tickers must be a list, e.g. ['AAPL'], not a string")
         tickers = list(tickers)  # also lets a generator be checked and then iterated
+        if not tickers:
+            raise ValueError("tickers must not be empty")
         not_str = [ticker for ticker in tickers if not isinstance(ticker, str)]
         if not_str:
             raise TypeError(f"every ticker must be a str; got {not_str!r}")
+        bad = [ticker for ticker in tickers if not ticker or ticker != ticker.strip()]
+        if bad:
+            raise ValueError(f"empty or space-padded tickers: {bad!r}")
+        tickers = list(dict.fromkeys(tickers))  # drop repeats, keep order
         series = {}
         errors = {}
         for ticker in tickers:
@@ -81,11 +87,21 @@ class MacroProvider(ABC):
         if isinstance(series_ids, str):
             raise TypeError("series_ids must be a list, e.g. ['DTB3'], not a string")
         series_ids = list(series_ids)
+        if not series_ids:
+            raise ValueError("series_ids must not be empty")
         not_str = [
             series_id for series_id in series_ids if not isinstance(series_id, str)
         ]
         if not_str:
             raise TypeError(f"every series_id must be a str; got {not_str!r}")
+        bad = [
+            series_id
+            for series_id in series_ids
+            if not series_id or series_id != series_id.strip()
+        ]
+        if bad:
+            raise ValueError(f"empty or space-padded series_ids: {bad!r}")
+        series_ids = list(dict.fromkeys(series_ids))  # drop repeats, keep order
         series = {}
         errors = {}
         for series_id in series_ids:
