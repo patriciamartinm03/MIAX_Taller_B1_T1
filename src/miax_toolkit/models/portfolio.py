@@ -193,9 +193,10 @@ class Portfolio:
                     f"benchmark name '{benchmark.name}' is also a ticker in portfolio "
                     f"'{self.name}'; give the benchmark a different name"
                 )
-            rows[benchmark.name] = self._metrics_row(
-                *self._benchmark_on_common_dates(benchmark)
+            _, _, benchmark_value, benchmark_returns = (
+                self._common_dates_with_benchmark(benchmark)
             )
+            rows[benchmark.name] = self._metrics_row(benchmark_value, benchmark_returns)
         return pd.DataFrame.from_dict(rows, orient="index").rename_axis("asset")
 
     # Currency effect
@@ -247,14 +248,6 @@ class Portfolio:
             benchmark_value,
             metrics.daily_returns(benchmark_value),
         )
-
-    def _benchmark_on_common_dates(
-        self, benchmark: "Portfolio"
-    ) -> tuple[pd.Series, pd.Series]:
-        _, _, benchmark_value, benchmark_returns = self._common_dates_with_benchmark(
-            benchmark
-        )
-        return benchmark_value, benchmark_returns
 
     def benchmark_issues(self, benchmark: "Portfolio") -> list[str]:
         self._check_benchmark(benchmark)
@@ -399,7 +392,7 @@ class Portfolio:
                     np.sqrt(np.diag(cov))
                 ),
             },
-            index=pd.Index(self.asset_returns().columns, name="asset"),
+            index=pd.Index(self.prices.columns, name="asset"),
         )
 
     def monte_carlo(
