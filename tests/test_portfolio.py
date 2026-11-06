@@ -1,3 +1,4 @@
+import math
 from datetime import date
 
 import pandas as pd
@@ -381,3 +382,88 @@ def test_non_price_series_asset_error_names_position_and_type():
 def test_risk_free_that_is_not_macro_series_names_the_type():
     with pytest.raises(TypeError, match="got float"):
         Portfolio("Test", [SPX], [1.0], 0.03)
+
+
+def test_comparison_with_a_copy_of_itself():
+    portfolio = make_usd_portfolio("My portfolio", {"SPY": 0.4, "FEZ": 0.6})
+    copy = make_usd_portfolio("Copy", {"SPY": 0.4, "FEZ": 0.6})
+    comparison = portfolio.benchmark_comparison(copy)
+    assert comparison.name == "Copy"
+    assert comparison["cagr_difference"] == pytest.approx(0)
+    assert comparison["volatility_difference"] == pytest.approx(0)
+    assert comparison["sharpe_difference"] == pytest.approx(0)
+    assert comparison["tracking_error"] == pytest.approx(0)
+    assert math.isnan(comparison["information_ratio"])
+
+
+def test_copy_missing_a_middle_day_has_no_tracking_error():
+    portfolio = Portfolio("My portfolio", [SPX], [1.0])
+    missing_day = make_series("SPY", "USD", [100, 101, 103, 104], dates=DATES.delete(2))
+    benchmark = Portfolio("Benchmark", [missing_day], [1.0])
+    comparison = portfolio.benchmark_comparison(benchmark)
+    assert comparison["tracking_error"] == pytest.approx(0)
+
+
+def test_benchmark_with_other_price_type_is_an_issue():
+    adjusted = PriceSeries(
+        ticker="SPY",
+        name="SPY",
+        asset_type="etf",
+        currency="USD",
+        source="test",
+        prices=pd.Series([100, 101, 102, 103, 104], index=DATES),
+        price_type="adj_close",
+    )
+    portfolio = Portfolio("My portfolio", [SPX], [1.0])
+    issues = portfolio.benchmark_issues(Portfolio("Benchmark", [adjusted], [1.0]))
+    assert issues == [
+        (
+            "benchmark 'Benchmark' uses price_type 'adj_close' "
+            "but portfolio 'My portfolio' uses 'close'"
+        )
+    ]
+
+
+def test_benchmark_starting_later_is_an_issue_but_can_be_compared():
+    portfolio = Portfolio("My portfolio", [SPX], [1.0])
+    late = make_series(
+        "SPY",
+        "USD",
+        [101, 103, 102, 104],
+        dates=pd.date_range("2026-01-06", periods=4, freq="B"),
+    )
+    benchmark = Portfolio("Benchmark", [late], [1.0])
+    assert portfolio.benchmark_issues(benchmark) == [
+        (
+            "benchmark 'Benchmark' starts on 2026-01-06, "
+            "after portfolio 'My portfolio' (2026-01-05)"
+        )
+    ]
+    comparison = portfolio.benchmark_comparison(benchmark)
+    assert comparison.notna().all()
+
+
+def test_benchmark_without_common_dates():
+    portfolio = Portfolio("My portfolio", [SPX], [1.0])
+    later = make_series(
+        "SPY",
+        "USD",
+        [100, 101, 102],
+        dates=pd.date_range("2026-02-02", periods=3, freq="B"),
+    )
+    benchmark = Portfolio("Benchmark", [later], [1.0])
+    assert "starts on 2026-02-02" in portfolio.benchmark_issues(benchmark)[0]
+    with pytest.raises(ValueError) as error:
+        portfolio.benchmark_comparison(benchmark)
+    message = str(error.value)
+    assert "has only 0 dates in common" in message
+    assert "Portfolio: 2026-01-05 to 2026-01-09" in message
+    assert "benchmark: 2026-02-02 to 2026-02-04" in message
+
+
+def test_benchmark_issues_and_comparison_need_a_portfolio():
+    portfolio = Portfolio("My portfolio", [SPX], [1.0])
+    with pytest.raises(TypeError, match="got PriceSeries"):
+        portfolio.benchmark_issues(SPX)
+    with pytest.raises(TypeError, match="got PriceSeries"):
+        portfolio.benchmark_comparison(SPX)
