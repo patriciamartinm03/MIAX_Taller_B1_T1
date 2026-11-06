@@ -304,6 +304,80 @@ class Portfolio:
         )
         return weighted_volatility - metrics.annual_volatility(self.returns())
 
+    def _simulation_inputs(
+        self, mu: np.ndarray | None = None, cov: np.ndarray | None = None
+    ) -> tuple[np.ndarray, np.ndarray]:
+        asset_returns = self.asset_returns()
+        tickers = list(asset_returns.columns)
+        n_assets = len(tickers)
+        assets = f"{n_assets}: {', '.join(tickers)}"
+
+        if mu is None:
+            mu = asset_returns.mean().to_numpy()
+        else:
+            mu = np.asarray(mu, dtype=float)
+            if mu.shape != (n_assets,):
+                received = mu.shape[0] if mu.ndim == 1 else f"shape {mu.shape}"
+                raise ValueError(
+                    f"mu must have one value per asset ({assets}), got {received}"
+                )
+            for ticker, mean in zip(tickers, mu):
+                if not np.isfinite(mean):
+                    raise ValueError(
+                        f"mu for {ticker} is {mean}; all values of mu must be finite"
+                    )
+            for ticker, mean in zip(tickers, mu):
+                if abs(mean) > 0.01:
+                    raise ValueError(
+                        f"mu for {ticker} is {mean:g}, which looks annual; "
+                        "mu must be a daily mean return"
+                    )
+
+        if cov is None:
+            cov = asset_returns.cov().to_numpy()
+        else:
+            cov = np.asarray(cov, dtype=float)
+            if cov.shape != (n_assets, n_assets):
+                raise ValueError(
+                    f"cov must be a {n_assets} x {n_assets} matrix, one row and column "
+                    f"per asset ({assets}), got shape {cov.shape}"
+                )
+            invalid = np.argwhere(~np.isfinite(cov))
+            if len(invalid) > 0:
+                row, column = invalid[0]
+                raise ValueError(
+                    f"cov for row {tickers[row]} and column {tickers[column]} is "
+                    f"{cov[row, column]}; all values of cov must be finite"
+                )
+            for ticker, variance in zip(tickers, np.diag(cov)):
+                if variance < 0:
+                    raise ValueError(
+                        f"cov diagonal for {ticker} is {variance:g}; "
+                        "a variance cannot be negative"
+                    )
+                if variance > 0.01:
+                    raise ValueError(
+                        f"cov diagonal for {ticker} is {variance:g} (a daily volatility "
+                        f"of {variance**0.5:.0%}), which looks annual; cov must be the "
+                        "covariance of daily returns"
+                    )
+
+        return mu, cov
+
+    def simulation_assumptions(
+        self, mu: np.ndarray | None = None, cov: np.ndarray | None = None
+    ) -> pd.DataFrame:
+        mu, cov = self._simulation_inputs(mu, cov)
+        return pd.DataFrame(
+            {
+                "annual_return": metrics.annualize_mean(mu),
+                "annual_volatility": metrics.annualize_volatility(
+                    np.sqrt(np.diag(cov))
+                ),
+            },
+            index=pd.Index(self.asset_returns().columns, name="asset"),
+        )
+
     def monte_carlo(
         self,
         config: SimulationConfig | None = None,
@@ -313,8 +387,7 @@ class Portfolio:
     ) -> SimulationResult:
         config = SimulationConfig() if config is None else config
         asset_returns = self.asset_returns()
-        mu = asset_returns.mean().to_numpy() if mu is None else mu
-        cov = asset_returns.cov().to_numpy() if cov is None else cov
+        mu, cov = self._simulation_inputs(mu, cov)
 
         simulated = simulate_returns(
             mu, cov, config.n_sims, config.horizon_days, config.seed
