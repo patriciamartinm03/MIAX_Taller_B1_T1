@@ -176,13 +176,10 @@ class Portfolio:
         }
 
     def metrics_table(self, benchmark: "Portfolio | None" = None) -> pd.DataFrame:
-        asset_returns = self.asset_returns()
-        rows = {
-            ticker: self._metrics_row(self.prices[ticker], asset_returns[ticker])
-            for ticker in self.prices.columns
-        }
-        rows["Portfolio"] = self._metrics_row(self.value(), self.returns())
-        if benchmark is not None:
+        """With a benchmark, every row uses only the dates both portfolios share."""
+        if benchmark is None:
+            prices, own_value, own_returns = self.prices, self.value(), self.returns()
+        else:
             self._check_benchmark(benchmark)
             if benchmark.name == "Portfolio":
                 raise ValueError(
@@ -194,11 +191,31 @@ class Portfolio:
                     f"benchmark name '{benchmark.name}' is also a ticker in portfolio "
                     f"'{self.name}'; give the benchmark a different name"
                 )
-            _, _, benchmark_value, benchmark_returns = (
+            own_value, own_returns, benchmark_value, benchmark_returns = (
                 self._common_dates_with_benchmark(benchmark)
             )
+            common = own_value.index
+            prices = self.prices.loc[common]
+
+        asset_returns = metrics.daily_returns(prices)
+        rows = {
+            ticker: self._metrics_row(prices[ticker], asset_returns[ticker])
+            for ticker in prices.columns
+        }
+        rows["Portfolio"] = self._metrics_row(own_value, own_returns)
+        if benchmark is not None:
             rows[benchmark.name] = self._metrics_row(benchmark_value, benchmark_returns)
         return pd.DataFrame.from_dict(rows, orient="index").rename_axis("asset")
+
+    def metrics_period(
+        self, benchmark: "Portfolio | None" = None
+    ) -> tuple[pd.Timestamp, pd.Timestamp]:
+        """First and last date used by metrics_table with the same benchmark."""
+        if benchmark is None:
+            dates = self.prices.index
+        else:
+            dates = self._common_dates_with_benchmark(benchmark)[0].index
+        return dates[0], dates[-1]
 
     # Currency effect
 
@@ -272,6 +289,17 @@ class Portfolio:
             issues.append(
                 f"benchmark '{benchmark.name}' ends on {benchmark_dates[-1].date()}, "
                 f"before portfolio '{self.name}' ({own_dates[-1].date()})"
+            )
+        # Gaps inside the shared period, e.g. holidays of another market
+        start = max(own_dates[0], benchmark_dates[0])
+        end = min(own_dates[-1], benchmark_dates[-1])
+        own_dates_inside = own_dates[(own_dates >= start) & (own_dates <= end)]
+        missing = own_dates_inside.difference(benchmark_dates)
+        if len(missing) > 0:
+            issues.append(
+                f"benchmark '{benchmark.name}' is missing {len(missing)} dates of "
+                f"portfolio '{self.name}' between {start.date()} and {end.date()} "
+                f"(first missing: {missing[0].date()})"
             )
         return issues
 
