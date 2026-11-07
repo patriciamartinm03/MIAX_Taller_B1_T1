@@ -10,12 +10,28 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "fredapi>=0.5.2",
     "matplotlib>=3.11.2",
     "numpy>=2.5.4",
     "pandas>=3.1.0",
+    "tiingo>=0.16.1",
     "yfinance>=1.7.0",
 ]
 
 [build-system]
 requires = ["uv_build>=0.13.5,<0.14.0"]
 build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Live tests call the real APIs; they run only with `pytest -m live`.
+addopts = "-m 'not live'"
+markers = ["live: calls the real provider APIs (needs network and API keys)"]
+# Fail on unexpected warnings, so deprecations in pandas/numpy surface early.
+filterwarnings = ["error"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "ruff==0.17.2",
+]
