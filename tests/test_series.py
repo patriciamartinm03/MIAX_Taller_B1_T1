@@ -110,6 +110,41 @@ def test_unsorted_fx_is_sorted_by_date():
     assert series.fx_to_usd.iloc[0] == pytest.approx(1.5)
 
 
+UP_DOWN_PRICES = [100, 110, 99, 108.9, 98.01]  # returns +10 %, -10 %, +10 %, -10 %
+
+
+def test_annual_return_of_up_down_10_percent_is_zero():
+    # Mean of [0.1, -0.1, 0.1, -0.1] is 0, even though the price ends at 98.01
+    series = make_series("USD", UP_DOWN_PRICES)
+    assert series.annual_return == pytest.approx(0, abs=1e-12)
+
+
+def test_annual_volatility_of_up_down_10_percent():
+    # Sum of squared deviations 0.04; sqrt(0.04 / 3 * 252) = sqrt(3.36) = 1.8330
+    series = make_series("USD", UP_DOWN_PRICES)
+    assert series.annual_volatility == pytest.approx(1.8330, abs=1e-4)
+
+
+def test_max_drawdown_measures_from_highest_price():
+    # Highest price 110; worst fall 98.01 / 110 - 1 = -0.109
+    series = make_series("USD", UP_DOWN_PRICES)
+    assert series.max_drawdown == pytest.approx(-0.109)
+
+
+def test_usd_asset_has_same_annual_metrics_in_usd():
+    series = make_series("USD", UP_DOWN_PRICES)
+    assert series.annual_return_usd == pytest.approx(series.annual_return)
+    assert series.annual_volatility_usd == pytest.approx(series.annual_volatility)
+
+
+def test_annual_volatility_usd_of_flat_eur_asset_comes_from_fx():
+    # Constant price in EUR: no local volatility, all USD volatility is FX
+    fx = pd.Series([1.00, 1.10, 1.05, 1.12, 1.08], index=DATES)
+    series = make_series("EUR", [100] * 5, fx)
+    assert series.annual_volatility == pytest.approx(0, abs=1e-12)
+    assert series.annual_volatility_usd > 0
+
+
 def test_prices_with_nan_still_fail():
     with pytest.raises(ValueError, match="empty values in prices"):
         make_series("USD", [100, None, 102, 103, 104])

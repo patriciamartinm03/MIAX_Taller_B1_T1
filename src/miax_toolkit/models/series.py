@@ -104,11 +104,23 @@ class PriceSeries:
 
     @property
     def annual_return(self) -> float:
+        """Annualized mean return in the asset's local currency."""
         return metrics.annual_return(self.daily_returns())
 
     @property
     def annual_volatility(self) -> float:
+        """Annualized volatility in the asset's local currency."""
         return metrics.annual_volatility(self.daily_returns())
+
+    @property
+    def annual_return_usd(self) -> float:
+        """Annualized mean return in USD (BASE_CURRENCY), including the FX effect."""
+        return metrics.annual_return(self.daily_usd_returns())
+
+    @property
+    def annual_volatility_usd(self) -> float:
+        """Annualized volatility in USD (BASE_CURRENCY), including the FX effect."""
+        return metrics.annual_volatility(self.daily_usd_returns())
 
     @property
     def max_drawdown(self) -> float:
