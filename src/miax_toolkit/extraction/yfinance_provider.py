@@ -52,6 +52,30 @@ class YFinanceProvider(PriceProvider):
         if not currency:
             raise ValueError(f"yfinance reported no currency for '{ticker}'")
 
+        # Some exchanges quote in hundredths (pence, agorot, cents): convert to
+        # the main currency so prices and the exchange rate use the same unit.
+        subunits = {"GBp": "GBP", "ILA": "ILS", "ZAc": "ZAR"}
+        if currency in subunits:
+            prices = prices / 100
+            currency = subunits[currency]
+
+        # Non-USD assets carry their exchange rate (USD per unit of currency),
+        # used by PriceSeries.usd_prices(). It starts a week earlier so it always
+        # covers the first price date.
+        fx_to_usd = None
+        if currency != "USD":
+            fx_history = yf.Ticker(f"{currency}USD=X").history(
+                start=start - timedelta(days=7),
+                end=end + timedelta(days=7),
+                interval="1d",
+                actions=False,
+            )
+            if fx_history.empty:
+                raise ValueError(f"yfinance returned no {currency}/USD rate for '{ticker}'")
+            fx_to_usd = fx_history["Close"].dropna()
+            fx_to_usd.index = to_naive_dates(fx_to_usd.index)
+            fx_to_usd.name = f"{currency}USD"
+
         return PriceSeries(
             ticker=ticker,
             name=metadata.get("longName") or metadata.get("shortName") or ticker,
@@ -60,4 +84,5 @@ class YFinanceProvider(PriceProvider):
             source=self.source,
             prices=prices,
             price_type=self.price_type,
+            fx_to_usd=fx_to_usd,
         )
