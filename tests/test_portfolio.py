@@ -188,6 +188,25 @@ def test_diversification_benefit_is_positive_with_uncorrelated_assets():
     assert portfolio.diversification_benefit() > 0
 
 
+def test_effective_n_assets_of_concentrated_portfolio_is_below_asset_count():
+    # 1 / (0.5² + 0.3² + 0.2²) = 1 / 0.38 = 2.6316
+    portfolio = make_usd_portfolio("My portfolio", {"SPY": 0.5, "FEZ": 0.3, "EWP": 0.2})
+    assert portfolio.effective_n_assets() == pytest.approx(2.6316, abs=1e-4)
+
+
+def test_drawdown_details_of_rebalanced_two_asset_portfolio():
+    # Daily portfolio returns 0.5 * rA + 0.5 * rB = [0.10, -0.20, 0.10, 0.20]
+    # Value [100, 110, 88, 96.8, 116.16]: peak 110, trough 88 (88 / 110 - 1 = -0.20),
+    # still below the peak at 96.8, back above it at 116.16
+    a = make_series("A", "USD", [100, 120, 84, 100.8, 110.88])
+    b = make_series("B", "USD", [100, 100, 90, 90, 117])
+    details = Portfolio("Test", [a, b], [0.5, 0.5]).drawdown_details()
+    assert details.max_drawdown == pytest.approx(-0.20)
+    assert details.peak_date == DATES[1]
+    assert details.trough_date == DATES[2]
+    assert details.recovery_date == DATES[4]
+
+
 def test_correlation_has_ones_on_the_diagonal():
     other = make_series("NDX", "USD", [100, 98, 103, 101, 106])
     correlation = Portfolio("Test", [SPX, other], [0.5, 0.5]).correlation()
@@ -296,6 +315,14 @@ def test_metrics_table_without_benchmark_uses_all_portfolio_dates():
         orient="index",
     ).rename_axis("asset")
     pd.testing.assert_frame_equal(portfolio.metrics_table(), expected)
+
+
+def test_eur_asset_annual_metrics_usd_match_metrics_table_row():
+    fx = pd.Series([1.10, 1.12, 1.08, 1.11, 1.09], index=DATES)
+    ibex = make_series("IBEX", "EUR", [100, 103, 99, 104, 106], fx)
+    row = Portfolio("Test", [ibex], [1.0]).metrics_table().loc["IBEX"]
+    assert ibex.annual_return_usd == pytest.approx(row["annual_return"])
+    assert ibex.annual_volatility_usd == pytest.approx(row["annual_volatility"])
 
 
 def test_metrics_period_with_and_without_benchmark():
