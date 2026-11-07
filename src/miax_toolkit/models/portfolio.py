@@ -440,5 +440,10 @@ class Portfolio:
         )
         # Same columns, in the same order, as the returns behind mu and cov
         weights = self._weights_by_ticker().reindex(self.prices.columns).to_numpy()
-        paths = returns_to_paths(simulated, weights, config.initial_value, rebalance)
-        return SimulationResult(paths, config)
+        rebalance_every = 1 if rebalance else None
+        paths = returns_to_paths(
+            simulated, weights, config.initial_value, rebalance_every=rebalance_every
+        )
+        return SimulationResult(
+            paths, config, rebalance_every=rebalance_every, mu=mu, cov=cov
+        )

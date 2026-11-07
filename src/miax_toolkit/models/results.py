@@ -1,8 +1,10 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+
+from miax_toolkit.simulation.montecarlo import check_rebalance_every
 
 
 @dataclass(frozen=True)
@@ -21,13 +23,34 @@ class SimulationConfig:
 
 @dataclass
 class SimulationResult:
-    paths: np.ndarray
+    """Simulated portfolio paths, with the settings and assumptions that produced them.
+
+    rebalance_every: days between rebalances (1 = daily, 21 = monthly,
+    63 = quarterly), or None for buy and hold. Required, so it is never mislabelled.
+    mu and cov are the DAILY assumptions used in the simulation (optional).
+    """
+
+    paths: np.ndarray = field(repr=False)
     config: SimulationConfig
+    rebalance_every: int | None
+    mu: np.ndarray | None = field(default=None, repr=False)
+    cov: np.ndarray | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         expected = (self.config.n_sims, self.config.horizon_days + 1)
         if self.paths.shape != expected:
             raise ValueError(f"paths must have shape {expected}")
+        check_rebalance_every(self.rebalance_every)
+
+        if (self.mu is None) != (self.cov is None):
+            raise ValueError("mu and cov must be given together")
+        if self.mu is not None:
+            self.mu = np.asarray(self.mu, dtype=float)
+            self.cov = np.asarray(self.cov, dtype=float)
+            if self.mu.ndim != 1:
+                raise ValueError("mu must be a 1D array")
+            if self.cov.shape != (self.mu.size, self.mu.size):
+                raise ValueError("cov must be a square matrix with one row per asset")
 
     @property
     def final_values(self) -> np.ndarray:
@@ -65,14 +88,28 @@ class SimulationResult:
         ax.legend()
         return ax
 
-    def plot_distribution(self, bins: int = 50, ax: plt.Axes | None = None) -> plt.Axes:
-        """Histogram of final values, with the initial value as reference."""
+    def plot_distribution(
+        self, bins: int = 50, var_level: float | None = 5, ax: plt.Axes | None = None
+    ) -> plt.Axes:
+        """Histogram of final values, with the initial value and the VaR marked.
+
+        var_level is the percentile used for the VaR (5 -> VaR 95 %); None hides it.
+        """
         if ax is None:
             _, ax = plt.subplots(figsize=(10, 5))
         ax.hist(self.final_values, bins=bins, color="tab:blue", alpha=0.7)
         ax.axvline(
             self.config.initial_value, color="black", ls="--", label="Initial value"
         )
+        if var_level is not None:
+            threshold = np.percentile(self.final_values, var_level)
+            loss = self.value_at_risk(var_level)
+            ax.axvline(
+                threshold,
+                color="tab:red",
+                ls="--",
+                label=f"VaR {100 - var_level:g} %: loss of {loss:.1%}",
+            )
         ax.set(title="Final value distribution", xlabel="Value", ylabel="Simulations")
         ax.legend()
         return ax

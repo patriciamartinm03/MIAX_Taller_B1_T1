@@ -48,28 +48,52 @@ def simulate_returns(
     return np.exp(drift + shocks) - 1
 
 
+def check_rebalance_every(rebalance_every: int | None) -> None:
+    """Accept None (buy and hold) or a whole number of days, at least 1."""
+    if rebalance_every is None:
+        return
+    if isinstance(rebalance_every, bool) or not isinstance(rebalance_every, int):
+        raise TypeError(
+            "rebalance_every must be a number of days (1 = daily, 21 = monthly, "
+            "63 = quarterly) or None (buy and hold)"
+        )
+    if rebalance_every < 1:
+        raise ValueError("rebalance_every must be at least 1 day")
+
+
 def returns_to_paths(
     returns: np.ndarray,
     weights: np.ndarray,
     initial_value: float = 100.0,
-    rebalance: bool = True,
+    *,
+    rebalance_every: int | None,
 ) -> np.ndarray:
     """Portfolio value paths. Shape: (n_sims, horizon + 1).
 
-    rebalance=True: weights are reset to their initial value every day.
-    rebalance=False: buy and hold; weights drift with prices.
+    rebalance_every: weights are reset to their initial value every that many
+    days (1 = daily, 21 = monthly, 63 = quarterly). None = buy and hold: weights
+    drift with prices and are never reset.
     """
     weights = np.asarray(weights, dtype=float)
     if weights.shape != (returns.shape[2],):
         raise ValueError("weights must have one value per asset")
     if not np.isclose(weights.sum(), 1.0):
         raise ValueError("weights must add up to 1")
+    check_rebalance_every(rebalance_every)
 
-    if rebalance:
-        growth = np.cumprod(1 + returns @ weights, axis=1)
-    else:
-        growth = (np.cumprod(1 + returns, axis=1) * weights).sum(axis=2)
+    n_sims, horizon, _ = returns.shape
+    block = horizon if rebalance_every is None else rebalance_every
 
-    start = np.ones((returns.shape[0], 1))
+    # Within each block the weights drift with prices (buy and hold);
+    # at the start of each block they are reset to the initial weights.
+    growth = np.empty((n_sims, horizon))
+    block_start_value = np.ones(n_sims)
+    for start in range(0, horizon, block):
+        end = min(start + block, horizon)
+        block_growth = np.cumprod(1 + returns[:, start:end, :], axis=1) @ weights
+        growth[:, start:end] = block_start_value[:, None] * block_growth
+        block_start_value = growth[:, end - 1]
+
+    start = np.ones((n_sims, 1))
 
     return initial_value * np.concatenate([start, growth], axis=1)

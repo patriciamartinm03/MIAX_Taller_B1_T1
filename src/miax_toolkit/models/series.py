@@ -81,7 +81,17 @@ class PriceSeries:
                     f"fx_to_usd ends on {last_fx.date()}, "
                     f"before the last price ({last_price.date()})"
                 )
-            self.fx_to_usd = self.fx_to_usd.reindex(self.prices.index, method="ffill")
+            max_gap = pd.Timedelta(days=7)
+            fx_on_price_dates = self.fx_to_usd.reindex(
+                self.prices.index, method="ffill", tolerance=max_gap
+            )
+            missing = fx_on_price_dates.index[fx_on_price_dates.isna()]
+            if len(missing) > 0:
+                raise ValueError(
+                    f"fx_to_usd has no rate in the {max_gap.days} days before "
+                    f"{len(missing)} price dates, e.g. {missing[0].date()}"
+                )
+            self.fx_to_usd = fx_on_price_dates
 
         returns = self.daily_returns()
         self.mean_return = float(returns.mean())
