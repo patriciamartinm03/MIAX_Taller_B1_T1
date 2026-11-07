@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from miax_toolkit.simulation.montecarlo import check_rebalance_every
+
 
 @dataclass(frozen=True)
 class SimulationConfig:
@@ -23,12 +25,14 @@ class SimulationConfig:
 class SimulationResult:
     """Simulated portfolio paths, with the settings and assumptions that produced them.
 
+    rebalance_every: days between rebalances (1 = daily, 21 = monthly,
+    63 = quarterly), or None for buy and hold. Required, so it is never mislabelled.
     mu and cov are the DAILY assumptions used in the simulation (optional).
     """
 
     paths: np.ndarray = field(repr=False)
     config: SimulationConfig
-    rebalance: bool = True
+    rebalance_every: int | None
     mu: np.ndarray | None = field(default=None, repr=False)
     cov: np.ndarray | None = field(default=None, repr=False)
 
@@ -36,6 +40,7 @@ class SimulationResult:
         expected = (self.config.n_sims, self.config.horizon_days + 1)
         if self.paths.shape != expected:
             raise ValueError(f"paths must have shape {expected}")
+        check_rebalance_every(self.rebalance_every)
 
         if (self.mu is None) != (self.cov is None):
             raise ValueError("mu and cov must be given together")
