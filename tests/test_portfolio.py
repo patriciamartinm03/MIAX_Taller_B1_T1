@@ -231,6 +231,94 @@ def test_benchmark_with_an_extra_day_gives_same_metrics_as_portfolio():
     )
 
 
+def test_benchmark_starting_later_with_same_prices_gives_same_metrics():
+    asset = make_series("SPX", "USD", [100, 104, 99, 103, 101])
+    # Same prices as the portfolio, but without its first day
+    late = make_series("SPY", "USD", [104, 99, 103, 101], dates=DATES[1:])
+    portfolio = Portfolio("Test", [asset], [1.0])
+    benchmark = Portfolio("Benchmark", [late], [1.0])
+
+    table = portfolio.metrics_table(benchmark)
+    assert table.loc["Portfolio"].tolist() == pytest.approx(
+        table.loc["Benchmark"].tolist()
+    )
+    assert table.loc["SPX"].tolist() == pytest.approx(table.loc["Benchmark"].tolist())
+
+
+def test_benchmark_missing_a_middle_day_gives_same_metrics_as_portfolio():
+    asset = make_series("SPX", "USD", [100, 104, 95, 103, 105])
+    # Same asset, but the benchmark has no price on the bad day
+    missing_day = make_series("SPY", "USD", [100, 104, 103, 105], dates=DATES.delete(2))
+    portfolio = Portfolio("Test", [asset], [1.0])
+    benchmark = Portfolio("Benchmark", [missing_day], [1.0])
+
+    table = portfolio.metrics_table(benchmark)
+    assert table.loc["Portfolio"].tolist() == pytest.approx(
+        table.loc["Benchmark"].tolist()
+    )
+
+
+def test_metrics_table_cagr_matches_benchmark_comparison():
+    portfolio = make_usd_portfolio("My portfolio", {"SPY": 0.4, "FEZ": 0.6})
+    late = make_series("EWP", "USD", [50, 52, 51, 55], dates=DATES[1:])
+    benchmark = Portfolio("Benchmark", [late], [1.0])
+
+    table = portfolio.metrics_table(benchmark)
+    comparison = portfolio.benchmark_comparison(benchmark)
+    assert table.loc["Portfolio", "cagr"] == pytest.approx(
+        table.loc["Benchmark", "cagr"] + comparison["cagr_difference"]
+    )
+
+
+def test_metrics_table_without_benchmark_uses_all_portfolio_dates():
+    rate = make_rate([3.0, 3.6], RATE_DATES)
+    other = make_series("NDX", "USD", [100, 98, 103, 101, 106])
+    portfolio = Portfolio("Test", [SPX, other], [0.5, 0.5], rate)
+    risk_free = portfolio.risk_free_daily()
+
+    def row(values, returns):
+        return {
+            "annual_return": metrics.annual_return(returns),
+            "cagr": metrics.cagr(values),
+            "annual_volatility": metrics.annual_volatility(returns),
+            "sharpe": metrics.sharpe_ratio(returns, risk_free),
+            "sortino": metrics.sortino_ratio(returns, risk_free),
+            "max_drawdown": metrics.max_drawdown(values),
+        }
+
+    asset_returns = metrics.daily_returns(portfolio.prices)
+    expected = pd.DataFrame.from_dict(
+        {
+            "SPX": row(portfolio.prices["SPX"], asset_returns["SPX"]),
+            "NDX": row(portfolio.prices["NDX"], asset_returns["NDX"]),
+            "Portfolio": row(portfolio.value(), portfolio.returns()),
+        },
+        orient="index",
+    ).rename_axis("asset")
+    pd.testing.assert_frame_equal(portfolio.metrics_table(), expected)
+
+
+def test_metrics_period_with_and_without_benchmark():
+    portfolio = Portfolio("My portfolio", [SPX], [1.0])
+    assert portfolio.metrics_period() == (DATES[0], DATES[-1])
+
+    late_and_short = make_series("SPY", "USD", [101, 103, 102], dates=DATES[1:4])
+    benchmark = Portfolio("Benchmark", [late_and_short], [1.0])
+    assert portfolio.metrics_period(benchmark) == (DATES[1], DATES[3])
+
+
+def test_benchmark_missing_a_middle_day_is_an_issue():
+    portfolio = Portfolio("My portfolio", [SPX], [1.0])
+    missing_day = make_series("SPY", "USD", [100, 101, 103, 104], dates=DATES.delete(2))
+    benchmark = Portfolio("Benchmark", [missing_day], [1.0])
+    assert portfolio.benchmark_issues(benchmark) == [
+        (
+            "benchmark 'Benchmark' is missing 1 dates of portfolio 'My portfolio' "
+            "between 2026-01-05 and 2026-01-09 (first missing: 2026-01-07)"
+        )
+    ]
+
+
 def test_benchmark_that_is_not_a_portfolio_fails():
     portfolio = Portfolio("Test", [SPX], [1.0])
     with pytest.raises(TypeError, match="benchmark must be a Portfolio"):
