@@ -154,9 +154,7 @@ class Portfolio:
             )
         else:
             normalized = self.prices / self.prices.iloc[0]
-            values = (normalized * self._weights_by_ticker()).sum(
-                axis=1
-            ) * initial_value
+            values = normalized @ self._weights_by_ticker() * initial_value
         return values.rename(self.name)
 
     def drawdown_details(self) -> metrics.DrawdownDetails:
