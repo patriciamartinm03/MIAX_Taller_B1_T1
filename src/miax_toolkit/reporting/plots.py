@@ -6,8 +6,8 @@ on their own. Each one draws on `ax` if given, or on a new figure, and returns i
 
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
-import pandas as pd
 import numpy as np
+import pandas as pd
 from matplotlib.ticker import PercentFormatter
 
 
