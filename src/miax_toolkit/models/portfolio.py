@@ -154,9 +154,7 @@ class Portfolio:
             )
         else:
             normalized = self.prices / self.prices.iloc[0]
-            values = (normalized * self._weights_by_ticker()).sum(
-                axis=1
-            ) * initial_value
+            values = normalized @ self._weights_by_ticker() * initial_value
         return values.rename(self.name)
 
     def drawdown_details(self) -> metrics.DrawdownDetails:
@@ -367,17 +365,19 @@ class Portfolio:
                 raise ValueError(
                     f"mu must have one value per asset ({assets}), got {received}"
                 )
-            for ticker, mean in zip(tickers, mu):
-                if not np.isfinite(mean):
-                    raise ValueError(
-                        f"mu for {ticker} is {mean}; all values of mu must be finite"
-                    )
-            for ticker, mean in zip(tickers, mu):
-                if abs(mean) > 0.01:
-                    raise ValueError(
-                        f"mu for {ticker} is {mean:g}, which looks annual; "
-                        "mu must be a daily mean return"
-                    )
+            not_finite = ~np.isfinite(mu)
+            if not_finite.any():
+                i = int(np.argmax(not_finite))  # first True
+                raise ValueError(
+                    f"mu for {tickers[i]} is {mu[i]}; all values of mu must be finite"
+                )
+            looks_annual = np.abs(mu) > 0.01
+            if looks_annual.any():
+                i = int(np.argmax(looks_annual))
+                raise ValueError(
+                    f"mu for {tickers[i]} is {mu[i]:g}, which looks annual; "
+                    "mu must be a daily mean return"
+                )
 
         if cov is None:
             cov = asset_returns.cov().to_numpy()
@@ -395,18 +395,22 @@ class Portfolio:
                     f"cov for row {tickers[row]} and column {tickers[column]} is "
                     f"{cov[row, column]}; all values of cov must be finite"
                 )
-            for ticker, variance in zip(tickers, np.diag(cov)):
-                if variance < 0:
-                    raise ValueError(
-                        f"cov diagonal for {ticker} is {variance:g}; "
-                        "a variance cannot be negative"
-                    )
-                if variance > 0.01:
-                    raise ValueError(
-                        f"cov diagonal for {ticker} is {variance:g} (a daily volatility "
-                        f"of {variance**0.5:.0%}), which looks annual; cov must be the "
-                        "covariance of daily returns"
-                    )
+            variances = np.diag(cov)
+            negative = variances < 0
+            if negative.any():
+                i = int(np.argmax(negative))  # first True
+                raise ValueError(
+                    f"cov diagonal for {tickers[i]} is {variances[i]:g}; "
+                    "a variance cannot be negative"
+                )
+            looks_annual = variances > 0.01
+            if looks_annual.any():
+                i = int(np.argmax(looks_annual))
+                raise ValueError(
+                    f"cov diagonal for {tickers[i]} is {variances[i]:g} (a daily "
+                    f"volatility of {variances[i] ** 0.5:.0%}), which looks annual; "
+                    "cov must be the covariance of daily returns"
+                )
 
         return mu, cov
 
