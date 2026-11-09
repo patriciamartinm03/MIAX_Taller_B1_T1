@@ -134,7 +134,7 @@ def test_weights_follow_tickers_not_alphabetical_order():
     portfolio = Portfolio("Test", [zzz, aaa], [0.8, 0.2])
 
     assert portfolio.returns().tolist() == pytest.approx([0.08] * 4)
-    final = portfolio.value(rebalance=False).iloc[-1]
+    final = portfolio.value(rebalance_every=None).iloc[-1]
     assert final == pytest.approx(100 * (0.8 * 1.4641 + 0.2 * 1.0))
 
 
@@ -161,8 +161,8 @@ def test_currency_exposure_adds_weights_by_currency():
 def test_value_starts_at_initial_value_with_and_without_rebalancing():
     other = make_series("NDX", "USD", [100, 98, 103, 101, 106])
     portfolio = Portfolio("My portfolio", [SPX, other], [0.5, 0.5])
-    for rebalance in (True, False):
-        values = portfolio.value(initial_value=250.0, rebalance=rebalance)
+    for rebalance_every in (1, 2, None):
+        values = portfolio.value(initial_value=250.0, rebalance_every=rebalance_every)
         assert values.index[0] == DATES[0]
         assert values.iloc[0] == pytest.approx(250.0)
         assert values.name == "My portfolio"
@@ -171,8 +171,26 @@ def test_value_starts_at_initial_value_with_and_without_rebalancing():
 def test_value_of_one_asset_is_its_normalized_price():
     portfolio = Portfolio("Test", [SPX], [1.0])
     expected = (SPX.prices / SPX.prices.iloc[0] * 100).tolist()
-    assert portfolio.value(rebalance=True).tolist() == pytest.approx(expected)
-    assert portfolio.value(rebalance=False).tolist() == pytest.approx(expected)
+    for rebalance_every in (1, 2, None):
+        values = portfolio.value(rebalance_every=rebalance_every)
+        assert values.tolist() == pytest.approx(expected)
+
+
+def test_value_rebalancing_every_two_days_by_hand():
+    a = make_series("A", "USD", [100, 110, 99, 108.9, 119.79])
+    b = make_series("B", "USD", [100, 100, 100, 100, 100])
+    portfolio = Portfolio("Test", [a, b], [0.5, 0.5])
+    # Days 1-2 without touching the weights: 50 * 1.10 * 0.90 + 50 = 99.5
+    # Reset to 50/50 of 99.5, days 3-4: 49.75 * 1.10 * 1.10 + 49.75 = 109.9475
+    expected = [100, 105, 99.5, 104.475, 109.9475]
+    assert portfolio.value(rebalance_every=2).tolist() == pytest.approx(expected)
+
+
+def test_value_daily_rebalancing_matches_returns():
+    other = make_series("NDX", "USD", [100, 98, 103, 101, 106])
+    portfolio = Portfolio("Test", [SPX, other], [0.5, 0.5])
+    expected = metrics.cumulative_value(portfolio.returns(), DATES[0], 100.0)
+    np.testing.assert_allclose(portfolio.value(), expected.to_numpy())
 
 
 def test_diversification_benefit_is_zero_with_one_asset():
@@ -652,14 +670,28 @@ def test_monte_carlo_default_equals_historical_inputs_by_hand():
 def test_monte_carlo_without_rebalance_differs_from_rebalance():
     portfolio = make_usd_portfolio("My portfolio", THREE_ASSETS)
     config = SimulationConfig(n_sims=50, horizon_days=10, seed=7)
-    rebalanced = portfolio.monte_carlo(config, DAILY_MU, DAILY_COV, rebalance=True)
-    buy_and_hold = portfolio.monte_carlo(config, DAILY_MU, DAILY_COV, rebalance=False)
+    rebalanced = portfolio.monte_carlo(config, DAILY_MU, DAILY_COV, rebalance_every=1)
+    buy_and_hold = portfolio.monte_carlo(
+        config, DAILY_MU, DAILY_COV, rebalance_every=None
+    )
     assert buy_and_hold.paths.shape == (50, 11)
     assert (buy_and_hold.paths[:, 0] == config.initial_value).all()
     assert (buy_and_hold.paths > 0).all()
     # Same simulated returns, so both agree after one day and drift apart later
     np.testing.assert_allclose(buy_and_hold.paths[:, 1], rebalanced.paths[:, 1])
     assert not np.allclose(buy_and_hold.paths, rebalanced.paths)
+
+
+def test_monte_carlo_records_rebalancing_and_inputs():
+    portfolio = make_usd_portfolio("My portfolio", THREE_ASSETS)
+    config = SimulationConfig(n_sims=50, horizon_days=30, seed=7)
+    monthly = portfolio.monte_carlo(config, DAILY_MU, DAILY_COV, rebalance_every=21)
+    assert monthly.rebalance_every == 21
+    np.testing.assert_allclose(monthly.mu, DAILY_MU)
+    np.testing.assert_allclose(monthly.cov, DAILY_COV)
+    daily = portfolio.monte_carlo(config, DAILY_MU, DAILY_COV)
+    assert daily.rebalance_every == 1
+    assert not np.allclose(monthly.paths, daily.paths)
 
 
 def test_monte_carlo_same_seed_gives_same_paths():
