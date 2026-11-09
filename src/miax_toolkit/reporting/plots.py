@@ -7,6 +7,7 @@ on their own. Each one draws on `ax` if given, or on a new figure, and returns i
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 from matplotlib.ticker import PercentFormatter
 
 
@@ -38,11 +39,15 @@ def plot_growth(
         _, ax = plt.subplots(figsize=(10, 5))
 
     rebased = values / values.iloc[0] * 100
-    for column in rebased.columns:
-        if column == highlight:
-            ax.plot(rebased.index, rebased[column], color="black", lw=2.5, label=column)
-        else:
-            ax.plot(rebased.index, rebased[column], lw=1, alpha=0.8, label=column)
+    others = rebased.drop(columns=[highlight], errors="ignore")
+    if not others.empty:
+        ax.plot(
+            others.index, others.to_numpy(), lw=1, alpha=0.8, label=list(others.columns)
+        )
+    if highlight in rebased.columns:
+        ax.plot(
+            rebased.index, rebased[highlight], color="black", lw=2.5, label=highlight
+        )
 
     ax.axhline(100, color="grey", ls="--", lw=0.8)
     _format_dates(ax)
@@ -87,11 +92,11 @@ def plot_correlation(corr: pd.DataFrame, ax: plt.Axes | None = None) -> plt.Axes
     ax.set_xticks(range(len(labels)), labels, rotation=45, ha="right")
     ax.set_yticks(range(len(labels)), labels)
 
-    for i in range(len(labels)):
-        for j in range(len(labels)):
-            value = corr.iloc[i, j]
-            color = "white" if abs(value) > 0.6 else "black"
-            ax.text(j, i, f"{value:.2f}", ha="center", va="center", color=color)
+    values = corr.to_numpy()
+    texts = np.where(np.isnan(values), "n/a", np.char.mod("%.2f", values))
+    colors = np.where(np.abs(values) > 0.6, "white", "black")
+    for (i, j), text in np.ndenumerate(texts):
+        ax.text(j, i, text, ha="center", va="center", color=colors[i, j])
 
     ax.figure.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
     ax.set_title("Correlation")
