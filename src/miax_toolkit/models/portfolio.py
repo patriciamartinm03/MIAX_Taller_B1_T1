@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
+from pathlib import Path
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -9,6 +11,7 @@ from miax_toolkit.models.macro import MacroSeries
 from miax_toolkit.models.results import SimulationConfig, SimulationResult
 from miax_toolkit.models.series import PriceSeries
 from miax_toolkit.preprocessing.alignment import align_prices
+from miax_toolkit.reporting.plots import plot_correlation, plot_drawdown, plot_growth
 from miax_toolkit.reporting.report import ReportSettings, portfolio_report
 from miax_toolkit.simulation.montecarlo import returns_to_paths, simulate_returns
 
@@ -477,3 +480,59 @@ class Portfolio:
         the automatic warnings and the number of decimals.
         """
         return portfolio_report(self, benchmark, simulation, settings)
+
+    def plots_report(
+        self,
+        benchmark: "Portfolio | None" = None,
+        simulation: SimulationResult | None = None,
+        show_assets: bool = True,
+        path: str | Path | None = None,
+    ) -> plt.Figure:
+        """Charts of the report in one figure.
+
+        - Growth in base 100 of the portfolio, the benchmark and (show_assets) each asset.
+        - Drawdown of the portfolio and the benchmark.
+        - Correlation of the assets (only with more than one asset).
+        - With a simulation: simulated paths and distribution of the final value.
+
+        With a benchmark, every chart uses only the dates both portfolios share.
+        The figure is returned and, if path is given, saved there. Call plt.show()
+        to display it from a script; notebooks show it on their own.
+        """
+        if simulation is not None and not isinstance(simulation, SimulationResult):
+            raise TypeError(
+                f"simulation must be a SimulationResult, got {type(simulation).__name__}"
+            )
+        start, end = self.metrics_period(benchmark)
+        values = self.value().loc[start:end].rename("Portfolio").to_frame()
+        if benchmark is not None:
+            if benchmark.name == "Portfolio" or benchmark.name in self.prices.columns:
+                raise ValueError(
+                    f"benchmark name '{benchmark.name}' is already used by the "
+                    "portfolio or one of its tickers; give the benchmark another name"
+                )
+            values = values.join(benchmark.value().rename(benchmark.name), how="inner")
+        history = values.columns.tolist()  # portfolio and benchmark only
+        if show_assets:
+            values = values.join(self.prices.loc[values.index])
+
+        has_correlation = len(self.assets) > 1
+        rows = 2 + (simulation is not None)
+        fig = plt.figure(figsize=(14, 5 * rows))
+        grid = fig.add_gridspec(rows, 2)
+
+        plot_growth(values, highlight="Portfolio", ax=fig.add_subplot(grid[0, :]))
+        if has_correlation:
+            plot_drawdown(values[history], ax=fig.add_subplot(grid[1, 0]))
+            plot_correlation(self.correlation(), ax=fig.add_subplot(grid[1, 1]))
+        else:
+            plot_drawdown(values[history], ax=fig.add_subplot(grid[1, :]))
+        if simulation is not None:
+            simulation.plot_paths(ax=fig.add_subplot(grid[2, 0]))
+            simulation.plot_distribution(ax=fig.add_subplot(grid[2, 1]))
+
+        fig.suptitle(f"{self.name}: {start.date()} to {end.date()} (USD)")
+        fig.tight_layout()
+        if path is not None:
+            fig.savefig(path, dpi=150, bbox_inches="tight")
+        return fig
