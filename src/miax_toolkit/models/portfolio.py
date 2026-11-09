@@ -9,6 +9,7 @@ from miax_toolkit.models.macro import MacroSeries
 from miax_toolkit.models.results import SimulationConfig, SimulationResult
 from miax_toolkit.models.series import PriceSeries
 from miax_toolkit.preprocessing.alignment import align_prices
+from miax_toolkit.reporting.report import ReportSettings, portfolio_report
 from miax_toolkit.simulation.montecarlo import returns_to_paths, simulate_returns
 
 
@@ -461,3 +462,18 @@ class Portfolio:
         return SimulationResult(
             paths, config, rebalance_every=rebalance_every, mu=mu, cov=cov
         )
+
+    # Report
+
+    def report(
+        self,
+        benchmark: "Portfolio | None" = None,
+        simulation: SimulationResult | None = None,
+        settings: ReportSettings | None = None,
+    ) -> str:
+        """Markdown report with key metrics, diagnostics and risk warnings.
+
+        benchmark and simulation are optional; settings holds the thresholds of
+        the automatic warnings and the number of decimals.
+        """
+        return portfolio_report(self, benchmark, simulation, settings)
