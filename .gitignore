@@ -16,3 +16,6 @@ __pycache__/
 # Local archive (not versioned)
 archive/
 data/
+
+# Demo output (report and charts)
+output/
