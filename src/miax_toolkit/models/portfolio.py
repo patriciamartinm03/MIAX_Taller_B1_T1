@@ -146,16 +146,22 @@ class Portfolio:
 
     # Historical value
 
-    def value(self, initial_value: float = 100.0, rebalance: bool = True) -> pd.Series:
-        """rebalance=True resets weights daily; False is buy and hold."""
-        if rebalance:
-            values = metrics.cumulative_value(
-                self.returns(), self.prices.index[0], initial_value
-            )
-        else:
-            normalized = self.prices / self.prices.iloc[0]
-            values = normalized @ self._weights_by_ticker() * initial_value
-        return values.rename(self.name)
+    def value(
+        self, initial_value: float = 100.0, rebalance_every: int | None = 1
+    ) -> pd.Series:
+        """Historical value of the portfolio, starting at initial_value.
+
+        rebalance_every: days between rebalances (1 = daily, 21 = monthly,
+        63 = quarterly), or None for buy and hold. Uses the same calculation
+        as the simulation, so history and Monte Carlo follow the same rule.
+        """
+        weights = self._weights_by_ticker().reindex(self.prices.columns).to_numpy()
+        # One "simulation" made of the real returns: shape (1, days, assets)
+        returns = self.asset_returns().to_numpy()[np.newaxis, :, :]
+        paths = returns_to_paths(
+            returns, weights, initial_value, rebalance_every=rebalance_every
+        )
+        return pd.Series(paths[0], index=self.prices.index, name=self.name)
 
     def drawdown_details(self) -> metrics.DrawdownDetails:
         return metrics.max_drawdown_details(self.value())
@@ -434,8 +440,13 @@ class Portfolio:
         config: SimulationConfig | None = None,
         mu: np.ndarray | None = None,
         cov: np.ndarray | None = None,
-        rebalance: bool = True,
+        rebalance_every: int | None = 1,
     ) -> SimulationResult:
+        """Monte Carlo of the portfolio. mu and cov are DAILY; by default, historical.
+
+        rebalance_every: days between rebalances (1 = daily, 21 = monthly,
+        63 = quarterly), or None for buy and hold.
+        """
         config = SimulationConfig() if config is None else config
         mu, cov = self._simulation_inputs(mu, cov)
 
@@ -444,7 +455,6 @@ class Portfolio:
         )
         # Same columns, in the same order, as the returns behind mu and cov
         weights = self._weights_by_ticker().reindex(self.prices.columns).to_numpy()
-        rebalance_every = 1 if rebalance else None
         paths = returns_to_paths(
             simulated, weights, config.initial_value, rebalance_every=rebalance_every
         )

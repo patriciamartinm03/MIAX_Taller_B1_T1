@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
+from miax_toolkit import metrics
 from miax_toolkit.simulation.montecarlo import check_rebalance_every
 
 
@@ -58,15 +59,24 @@ class SimulationResult:
 
     def prob_loss(self) -> float:
         """Share of simulations that end below the initial value."""
-        return float((self.final_values < self.config.initial_value).mean())
+        return metrics.prob_loss(self.final_values, self.config.initial_value)
 
     def value_at_risk(self, level: float = 5) -> float:
         """Loss at the given percentile of final values, as a fraction of the initial value.
 
         E.g. 0.18 means: in the worst `level` % of simulations you lose at least 18 %.
         """
-        return float(
-            1 - np.percentile(self.final_values, level) / self.config.initial_value
+        return metrics.value_at_risk(
+            self.final_values, self.config.initial_value, level
+        )
+
+    def expected_shortfall(self, level: float = 5) -> float:
+        """Average loss in the worst `level` % of simulations (CVaR), as a fraction.
+
+        Always at least as large as value_at_risk for the same level.
+        """
+        return metrics.expected_shortfall(
+            self.final_values, self.config.initial_value, level
         )
 
     def percentiles(self, levels: tuple[int, ...] = (5, 50, 95)) -> pd.DataFrame:
