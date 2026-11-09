@@ -1,0 +1,10 @@
+Falta o está incompleto:
+
+1. Portfolio.plots_report() (4.5): no existe. El PDF lo pide por nombre. Las funciones de gráficos ya están en reporting/plots.py, pero no hay un método que las junte. Hasta docs/esquema_portfolio.md lo tiene pendiente ([ ] report() y plots_report()). Por eso en demo.py tuve que montar los gráficos a mano, cuando debería bastar con llamar a portfolio.plots_report(benchmark).
+2. Diagrama de arquitectura (4.6): no hay ninguno. No he encontrado UML, Mermaid ni FossFLOW en el repo. Un diagrama de clases en Mermaid dentro del README se ve directamente en GitHub y sirve para la presentación.
+3. README (4.1): incompleto.
+   - No tiene ejemplos de uso que se puedan reproducir. Solo explica la instalación.
+   - La sección "Estructura" está desactualizada: pone extraccion/, modelos/ y MarketSignal, pero en el código las carpetas son extraction/ y models/ y los proveedores son yfinance, Tiingo y FRED.
+4. Justificar la validación de inputs (4.5). Las restricciones existen en el código y están anotadas en docs/esquema_portfolio.md. El PDF pide además razonar si conviene aceptar cualquier input o poner límites, y eso falta. Un apartado en el README bastaría: por qué se exige PriceSeries, el mismo price_type en todos los activos, pesos que sumen 1, al menos 3 fechas comunes, etc.
+5. Monte Carlo de un solo activo (4.4): no hay un método directo. Se puede hacer con Portfolio(name, [serie], [1.0]). Con documentarlo y mostrarlo en la demo probablemente basta, o se puede añadir un atajo.
+6. Ninguna demo descarga un índice. El código lo soporta, pero conviene enseñarlo. Por ejemplo, ^GSPC o ^IBEX en demo.py.
