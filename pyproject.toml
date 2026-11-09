@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Toolkit de extraccion, analisis bursatil y gestion de carteras (MIAX Taller B1-T1)"
 readme = "README.md"
 authors = [
-    { name = "Patricia Martin", email = ""},
+    { name = "Patricia Martin", email = "pammrs14@gmail.com"},
     { name = "Alvaro Hernandez", email = ""},
     { name = "Lautaro Huljich", email = "lautarohuljich@gmail.com" }
 ]
