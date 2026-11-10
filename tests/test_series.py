@@ -148,3 +148,83 @@ def test_annual_volatility_usd_of_flat_eur_asset_comes_from_fx():
 def test_prices_with_nan_still_fail():
     with pytest.raises(ValueError, match="empty values in prices"):
         make_series("USD", [100, None, 102, 103, 104])
+
+
+# --- Statistics on creation and validation of the other fields ---------------
+
+
+def build(**overrides) -> PriceSeries:
+    """A valid USD series; any field can be overridden."""
+    fields = {
+        "ticker": "TEST",
+        "name": "Test asset",
+        "asset_type": "equity",
+        "currency": "USD",
+        "source": "test",
+        "prices": pd.Series([100.0, 110.0, 99.0, 108.9, 98.01], index=DATES),
+        "price_type": "close",
+    }
+    return PriceSeries(**(fields | overrides))
+
+
+def test_mean_and_std_are_computed_on_creation():
+    # Task 4.3: available as plain attributes right after instantiation
+    series = build()
+    returns = series.prices.pct_change(fill_method=None).dropna()
+    assert series.mean_return == pytest.approx(returns.mean())
+    assert series.std_return == pytest.approx(returns.std(ddof=1))  # sample std
+    assert series.mean_return == pytest.approx(0, abs=1e-12)  # +10 %, -10 % twice
+
+
+def test_statistics_are_not_constructor_arguments():
+    with pytest.raises(TypeError):
+        build(mean_return=0.5)
+
+
+def test_unsorted_prices_are_sorted_by_date():
+    prices = pd.Series([104.0, 103.0, 102.0, 101.0, 100.0], index=DATES[::-1])
+    series = build(prices=prices)
+    assert series.prices.index.is_monotonic_increasing
+    assert series.prices.iloc[0] == 100.0
+    assert series.mean_return > 0  # rising once sorted
+
+
+@pytest.mark.parametrize(
+    "field, given, stored",
+    [("asset_type", "ETF", "etf"), ("price_type", "ADJ_CLOSE", "adj_close")],
+)
+def test_text_fields_are_lowercased(field, given, stored):
+    assert getattr(build(**{field: given}), field) == stored
+
+
+@pytest.mark.parametrize(
+    "overrides, message",
+    [
+        ({"asset_type": "bond"}, "asset_type must be"),
+        ({"price_type": "open"}, "price_type must be"),
+        (
+            {"prices": pd.Series([100.0, 101.0], index=DATES[:2])},
+            "at least three prices",
+        ),
+        (
+            {"prices": pd.Series([100.0, 101.0, 102.0], index=DATES[[0, 0, 1]])},
+            "repeated dates in prices",
+        ),
+    ],
+)
+def test_invalid_fields_fail(overrides, message):
+    with pytest.raises(ValueError, match=message):
+        build(**overrides)
+
+
+@pytest.mark.parametrize(
+    "prices, message",
+    [
+        ([100.0, 101.0, 102.0], "must be a pandas Series"),
+        (pd.Series([100.0, 101.0, 102.0]), "dates as its index"),
+        (pd.Series(["a", "b", "c"], index=DATES[:3]), "must be numeric"),
+    ],
+)
+def test_prices_must_be_a_numeric_dated_series(prices, message):
+    with pytest.raises(TypeError, match=message):
+        build(prices=prices)
