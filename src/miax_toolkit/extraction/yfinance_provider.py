@@ -71,7 +71,9 @@ class YFinanceProvider(PriceProvider):
                 actions=False,
             )
             if fx_history.empty:
-                raise ValueError(f"yfinance returned no {currency}/USD rate for '{ticker}'")
+                raise ValueError(
+                    f"yfinance returned no {currency}/USD rate for '{ticker}'"
+                )
             fx_to_usd = fx_history["Close"].dropna()
             fx_to_usd.index = to_naive_dates(fx_to_usd.index)
             fx_to_usd.name = f"{currency}USD"
