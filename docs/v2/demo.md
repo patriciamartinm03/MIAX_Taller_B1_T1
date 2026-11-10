@@ -23,7 +23,7 @@ printed.
 
 ## 1. Requirements
 
-- The project set up as described in the [README](../README.md): `uv sync` already run.
+- The project set up as described in the [README](../../README.md): `uv sync` already run.
 - API keys in `.env` (optional):
 
 | Variable | Used for | Without it |
