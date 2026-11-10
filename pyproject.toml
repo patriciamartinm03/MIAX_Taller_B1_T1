@@ -5,7 +5,7 @@ description = "Toolkit de extraccion, analisis bursatil y gestion de carteras (M
 readme = "README.md"
 authors = [
     { name = "Patricia Martin", email = "pammrs14@gmail.com"},
-    { name = "Alvaro Hernandez", email = ""},
+    { name = "Alvaro Hernandez" },
     { name = "Lautaro Huljich", email = "lautarohuljich@gmail.com" }
 ]
 requires-python = ">=3.12"
@@ -24,9 +24,6 @@ build-backend = "uv_build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# Live tests call the real APIs; they run only with `pytest -m live`.
-addopts = "-m 'not live'"
-markers = ["live: calls the real provider APIs (needs network and API keys)"]
 # Fail on unexpected warnings, so deprecations in pandas/numpy surface early.
 filterwarnings = ["error"]
 

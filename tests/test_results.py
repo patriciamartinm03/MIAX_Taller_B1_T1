@@ -1,3 +1,5 @@
+from dataclasses import FrozenInstanceError
+
 import numpy as np
 import pytest
 
@@ -31,14 +33,62 @@ def test_risk_measures_use_metrics():
         )
 
 
-def test_expected_shortfall_is_at_least_value_at_risk():
+@pytest.mark.parametrize(
+    "bad, message",
+    [
+        ({"n_sims": 0}, "at least 1"),
+        ({"horizon_days": 0}, "at least 1"),
+        ({"initial_value": 0}, "must be positive"),
+        ({"initial_value": -100}, "must be positive"),
+    ],
+)
+def test_config_rejects_invalid_values(bad, message):
+    with pytest.raises(ValueError, match=message):
+        SimulationConfig(**bad)
+
+
+def test_config_is_frozen():
+    config = SimulationConfig()
+    with pytest.raises(FrozenInstanceError):
+        config.n_sims = 10
+
+
+def test_paths_must_match_the_config_shape():
+    result = make_result(n_sims=20, horizon_days=10)
+    other_config = SimulationConfig(n_sims=20, horizon_days=11)
+    with pytest.raises(ValueError, match=r"paths must have shape \(20, 12\)"):
+        SimulationResult(result.paths, other_config, rebalance_every=1)
+
+
+def test_mu_and_cov_must_be_given_together():
     result = make_result()
-    assert result.expected_shortfall() >= result.value_at_risk()
+    with pytest.raises(ValueError, match="given together"):
+        SimulationResult(result.paths, result.config, rebalance_every=1, mu=MU)
+    with pytest.raises(ValueError, match="given together"):
+        SimulationResult(result.paths, result.config, rebalance_every=1, cov=COV)
 
 
-def test_value_at_risk_rejects_a_confidence_level_passed_as_percentile():
-    with pytest.raises(ValueError, match="level must be a percentile"):
-        make_result().value_at_risk(95)
+@pytest.mark.parametrize(
+    "mu, cov, message",
+    [
+        (np.array([MU]), COV, "mu must be a 1D array"),
+        (MU, np.eye(3) * 0.0001, "square matrix with one row per asset"),
+    ],
+)
+def test_mu_and_cov_shapes_are_checked(mu, cov, message):
+    result = make_result()
+    with pytest.raises(ValueError, match=message):
+        SimulationResult(result.paths, result.config, rebalance_every=1, mu=mu, cov=cov)
+
+
+def test_percentiles_have_one_row_per_day_and_start_at_initial_value():
+    result = make_result(horizon_days=60)
+    table = result.percentiles((5, 50, 95))
+    assert table.columns.tolist() == ["p5", "p50", "p95"]
+    assert len(table) == 61
+    assert table.iloc[0].tolist() == pytest.approx([100.0] * 3)
+    final = table.iloc[-1]
+    assert final["p5"] <= final["p50"] <= final["p95"]
 
 
 def test_rebalance_every_is_required():

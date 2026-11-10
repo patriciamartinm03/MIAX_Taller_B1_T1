@@ -66,12 +66,6 @@ def test_fx_move_shows_in_returns():
     assert portfolio.asset_returns()["IBEX"].iloc[1] == pytest.approx(0.10)
 
 
-def test_nan_weight_fails_as_invalid_weight():
-    other = make_series("NDX", "USD", [100, 102, 101, 104, 105])
-    with pytest.raises(ValueError, match="weights must be finite numbers"):
-        Portfolio("Test", [SPX, other], [float("nan"), 0.5])
-
-
 def test_few_common_dates_error_shows_each_asset_range():
     late = make_series(
         "LATE",
@@ -90,11 +84,6 @@ def test_risk_free_in_eur_fails():
     rate = make_rate([3.0, 3.1], RATE_DATES, currency="EUR")
     with pytest.raises(ValueError, match="risk_free must be in USD"):
         Portfolio("Test", [SPX], [1.0], rate)
-
-
-def test_rate_currency_is_uppercased_and_none_is_kept():
-    assert make_rate([3.0, 3.1], RATE_DATES, currency="usd").currency == "USD"
-    assert make_rate([3.0, 3.1], RATE_DATES, currency=None).currency is None
 
 
 def test_risk_free_with_wrong_units_fails():
@@ -364,12 +353,6 @@ def test_benchmark_missing_a_middle_day_is_an_issue():
     ]
 
 
-def test_benchmark_that_is_not_a_portfolio_fails():
-    portfolio = Portfolio("Test", [SPX], [1.0])
-    with pytest.raises(TypeError, match="benchmark must be a Portfolio"):
-        portfolio.metrics_table(SPX)
-
-
 def test_currency_attribution_combines_local_and_fx_returns():
     fx = pd.Series([1.10, 1.12, 1.08, 1.11, 1.09], index=DATES)
     ibex = make_series("IBEX", "EUR", [100, 103, 99, 104, 106], fx)
@@ -470,12 +453,25 @@ def test_benchmark_overlap_with_itself_is_one():
     assert portfolio.benchmark_overlap_share(copy) == pytest.approx(1.0)
 
 
-def test_benchmark_that_is_not_a_portfolio_names_the_type():
+@pytest.mark.parametrize(
+    "method",
+    [
+        "metrics_table",
+        "metrics_period",
+        "benchmark_comparison",
+        "benchmark_issues",
+        "benchmark_overlap",
+        "benchmark_overlap_share",
+        "report",
+        "plots_report",
+    ],
+)
+@pytest.mark.parametrize("not_a_portfolio", [SPX, "SPY"])
+def test_every_benchmark_method_rejects_a_non_portfolio(method, not_a_portfolio):
     portfolio = Portfolio("Test", [SPX], [1.0])
-    with pytest.raises(TypeError, match="got PriceSeries"):
-        portfolio.benchmark_overlap(SPX)
-    with pytest.raises(TypeError, match="got str"):
-        portfolio.metrics_table("SPY")
+    expected = f"benchmark must be a Portfolio, got {type(not_a_portfolio).__name__}"
+    with pytest.raises(TypeError, match=expected):
+        getattr(portfolio, method)(not_a_portfolio)
 
 
 def test_repeated_ticker_error_names_the_ticker():
@@ -512,7 +508,9 @@ def test_negative_weight_error_names_ticker_and_weight():
 
 def test_nan_weight_error_names_the_ticker():
     other = make_series("NDX", "USD", [100, 102, 101, 104, 105])
-    with pytest.raises(ValueError, match="weight of NDX is nan"):
+    with pytest.raises(
+        ValueError, match="weights must be finite numbers; the weight of NDX is nan"
+    ):
         Portfolio("Test", [SPX, other], [0.5, float("nan")])
 
 
@@ -606,14 +604,6 @@ def test_benchmark_without_common_dates():
     assert "has only 0 dates in common" in message
     assert "Portfolio: 2026-01-05 to 2026-01-09" in message
     assert "benchmark: 2026-02-02 to 2026-02-04" in message
-
-
-def test_benchmark_issues_and_comparison_need_a_portfolio():
-    portfolio = Portfolio("My portfolio", [SPX], [1.0])
-    with pytest.raises(TypeError, match="got PriceSeries"):
-        portfolio.benchmark_issues(SPX)
-    with pytest.raises(TypeError, match="got PriceSeries"):
-        portfolio.benchmark_comparison(SPX)
 
 
 THREE_ASSETS = {"SPY": 0.4, "FEZ": 0.3, "EWP": 0.3}

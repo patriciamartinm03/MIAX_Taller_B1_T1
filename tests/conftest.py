@@ -6,13 +6,7 @@ import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
-import pandas as pd
 import pytest
-
-
-def business_days(n: int, start: str = "2024-01-02", tz: str | None = None):
-    """n consecutive business days, optionally timezone-aware."""
-    return pd.date_range(start, periods=n, freq="B", tz=tz)
 
 
 @pytest.fixture(autouse=True)
