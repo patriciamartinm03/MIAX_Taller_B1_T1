@@ -184,8 +184,52 @@ def ask_assets(label: str, examples: list[tuple[str, float]]) -> dict[str, float
         )
 
 
+# Console output helpers (ASCII only, so any terminal can print them)
+
+WIDTH = 78
+
+
 def step(number: int, title: str, module: str) -> None:
-    print(f"\n=== Paso {number}: {title}  ({module}) ===")
+    print("\n" + "=" * WIDTH)
+    print(f" PASO {number}/5  {title.upper()}")
+    print(f" modulo: {module}")
+    print("=" * WIDTH)
+
+
+def section(title: str) -> None:
+    print(f"\n-- {title} " + "-" * max(0, WIDTH - len(title) - 4))
+
+
+def table(
+    headers: list[str],
+    rows: list[list[str]],
+    left: int = 1,
+    split_before: int | None = None,
+) -> None:
+    """Print rows in aligned columns: text to the left, numbers to the right.
+
+    left: how many leading columns hold text (aligned to the left).
+    split_before: index of the row before which a separator line is drawn.
+    """
+    widths = [max(len(str(cell)) for cell in column) for column in zip(headers, *rows)]
+
+    def line(cells: list[str]) -> str:
+        return "  " + "  ".join(
+            f"{cell:<{width}}" if position < left else f"{cell:>{width}}"
+            for position, (cell, width) in enumerate(zip(cells, widths))
+        )
+
+    rule = "  " + "  ".join("-" * width for width in widths)
+    print(line(headers))
+    print(rule)
+    for position, row in enumerate(rows):
+        if position == split_before:
+            print(rule)
+        print(line(row))
+
+
+def pct(value: float, decimals: int = 1) -> str:
+    return f"{value:.{decimals}%}"
 
 
 # Step 1: extraction
@@ -195,7 +239,7 @@ def download(
     provider: PriceProvider, weights: dict[str, float], start: date, end: date
 ) -> tuple[list[PriceSeries], list[float]]:
     """get_many for every ticker; for the ones that fail, ask for a replacement."""
-    print(f"{provider.source}.get_many({list(weights)})")
+    print(f"  {provider.source}.get_many: {', '.join(weights)}")
     series, errors = provider.get_many(list(weights), start, end)
     while errors:
         for ticker, error in errors.items():
@@ -217,50 +261,65 @@ def download(
     return [series[ticker] for ticker in weights], list(weights.values())
 
 
-def show_price_series(assets: list[PriceSeries]) -> None:
+def show_price_series(assets: list[PriceSeries], weights: list[float]) -> None:
     """Same PriceSeries fields whatever the provider; mean and std come from init."""
-    for asset in assets:
-        print(
-            f"  {asset.ticker:<8} {asset.name[:30]:<30} {asset.asset_type:<6} "
-            f"{asset.currency}  {asset.source}/{asset.price_type}  "
-            f"{asset.prices.index[0].date()} a {asset.prices.index[-1].date()} "
-            f"({len(asset.prices)} precios)  media {asset.mean_return:+.4%}  "
-            f"desv. {asset.std_return:.4%}"
-        )
+    rows = [
+        [
+            asset.ticker,
+            asset.name[:24],
+            asset.asset_type,
+            asset.currency,
+            pct(weight, 0),
+            str(asset.prices.index[0].date()),
+            str(asset.prices.index[-1].date()),
+            str(len(asset.prices)),
+            f"{asset.mean_return:+.3%}",
+            pct(asset.std_return, 3),
+        ]
+        for asset, weight in zip(assets, weights)
+    ]
+    headers = ["Ticker", "Nombre", "Tipo", "Divisa", "Peso", "Desde", "Hasta"]
+    table([*headers, "Precios", "Media dia", "Desv. dia"], rows, left=4)
+    first = assets[0]
+    print(f"  Fuente: {first.source}, precio {first.price_type}.", end=" ")
+    print("Media y desviacion se calculan al crear cada PriceSeries.")
 
 
 def load_risk_free(start: date, end: date) -> MacroSeries | None:
-    print("fred.get_series('DTB3')")
+    section("Tipo sin riesgo (FRED)")
     try:
         series = FredProvider().get_series("DTB3", start, end, currency="USD")
     except ValueError as error:
         first_line = str(error).splitlines()[0]
-        print(f"  Sin tipo sin riesgo de FRED ({first_line}). Se usa 0.")
+        print(f"  No disponible ({first_line})")
+        print("  Se usa un tipo sin riesgo de 0 para Sharpe y Sortino.")
         return None
-    print(
-        f"  {series.series_id}: {series.name}, {series.units}, "
-        f"{len(series.values)} datos, media {series.mean:.2f}"
-    )
+    print(f"  {series.series_id}: {series.name}")
+    mean = float(series.as_decimal().mean())
+    print(f"  {len(series.values)} datos, media del periodo descargado {pct(mean, 2)}")
     return series
 
 
 # Step 2: preprocessing
 
 
-def show_alignment(label: str, assets: list[PriceSeries]) -> pd.DataFrame:
+def align(label: str, assets: list[PriceSeries]) -> tuple[pd.DataFrame, list[str]]:
     """Convert each asset to USD and keep only the dates all of them share."""
-    usd_prices = {asset.ticker: asset.usd_prices() for asset in assets}
     for asset in assets:
         if asset.currency != "USD":
-            print(f"  {asset.ticker}: {asset.currency} -> USD al tipo diario")
+            print(f"  {asset.ticker}: precios en {asset.currency}, convertidos a USD")
+    usd_prices = {asset.ticker: asset.usd_prices() for asset in assets}
     aligned = align_prices(usd_prices)
     longest = max(len(prices) for prices in usd_prices.values())
-    print(
-        f"  {label}: {len(aligned)} fechas comunes de {longest} "
-        f"({longest - len(aligned)} descartadas por calendarios distintos), "
-        f"{aligned.index[0].date()} a {aligned.index[-1].date()}"
-    )
-    return aligned
+    row = [
+        label,
+        str(longest),
+        str(len(aligned)),
+        str(longest - len(aligned)),
+        str(aligned.index[0].date()),
+        str(aligned.index[-1].date()),
+    ]
+    return aligned, row
 
 
 # Step 4: simulation of a single asset, with the simulation module directly
@@ -276,11 +335,43 @@ def simulate_asset(asset: PriceSeries, config: SimulationConfig) -> SimulationRe
     return SimulationResult(paths, config, rebalance_every=None, mu=mu, cov=cov)
 
 
-def show_simulation(label: str, simulation: SimulationResult) -> None:
-    print(
-        f"  {label:<30} prob. perdida {simulation.prob_loss():6.1%}  "
-        f"VaR 95 % {simulation.value_at_risk():6.1%}  "
-        f"CVaR 95 % {simulation.expected_shortfall():6.1%}"
+def simulation_row(label: str, simulation: SimulationResult) -> list[str]:
+    return [
+        label,
+        f"{np.median(simulation.final_values):,.0f}",
+        pct(simulation.prob_loss()),
+        pct(simulation.value_at_risk()),
+        pct(simulation.expected_shortfall()),
+    ]
+
+
+METRIC_COLUMNS = {
+    "annual_return": "Rent. anual",
+    "cagr": "CAGR",
+    "annual_volatility": "Volatilidad",
+    "sharpe": "Sharpe",
+    "sortino": "Sortino",
+    "max_drawdown": "Max. caida",
+}
+
+
+def show_metrics(portfolio: Portfolio, benchmark: Portfolio | None) -> None:
+    metrics = portfolio.metrics_table(benchmark)
+    ratios = {"sharpe", "sortino"}
+    rows = [
+        [
+            portfolio.name if label == "Portfolio" else str(label),
+            *(
+                f"{metrics.at[label, column]:.2f}"
+                if column in ratios
+                else pct(metrics.at[label, column])
+                for column in METRIC_COLUMNS
+            ),
+        ]
+        for label in metrics.index
+    ]
+    table(
+        ["Activo", *METRIC_COLUMNS.values()], rows, split_before=len(portfolio.assets)
     )
 
 
@@ -311,8 +402,11 @@ def save_charts(
 
 
 def main() -> None:
-    print("=== miax_toolkit: demo interactiva ===")
-    print("Pulsa Enter para aceptar el valor entre corchetes.\n")
+    print("=" * WIDTH)
+    print(" MIAX TOOLKIT  demo interactiva")
+    print(" Pulsa Enter para aceptar el valor entre corchetes.")
+    print("=" * WIDTH)
+    section("Cartera")
 
     name = ask("Nombre de la cartera", "Cartera demo", parse_name)
     source = ask(
@@ -328,6 +422,7 @@ def main() -> None:
     )
 
     weights = ask_assets("tu cartera", EXAMPLE_ASSETS)
+    section("Indice de referencia")
     with_benchmark = ask(
         "Comparar con un indice de referencia? (s/n)", "s", parse_yes_no
     )
@@ -337,7 +432,7 @@ def main() -> None:
         else None
     )
 
-    print("\n--- Simulacion de Monte Carlo ---")
+    section("Simulacion de Monte Carlo")
     n_sims = ask("Numero de simulaciones", "1000", parse_int(1, 100_000))
     horizon = ask(
         "Horizonte en dias de mercado (252 = 1 ano)", "252", parse_int(1, 252 * 30)
@@ -356,19 +451,25 @@ def main() -> None:
     try:
         step(1, "Extraccion de datos", "miax_toolkit.extraction")
         risk_free = load_risk_free(start, end)
+        section(f"Cartera: {name}")
         assets, asset_weights = download(provider, dict(weights), start, end)
-        show_price_series(assets)
+        show_price_series(assets, asset_weights)
         benchmark_assets = None
         if benchmark_weights:
+            section("Indice de referencia")
             benchmark_assets, benchmark_weight_list = download(
                 provider, dict(benchmark_weights), start, end
             )
-            show_price_series(benchmark_assets)
+            show_price_series(benchmark_assets, benchmark_weight_list)
 
-        step(2, "Limpieza y alineacion", "miax_toolkit.preprocessing")
-        aligned = show_alignment(name, assets)
+        step(2, "Limpieza y alineacion de fechas", "miax_toolkit.preprocessing")
+        aligned, row = align(name, assets)
+        rows = [row]
         if benchmark_assets:
-            show_alignment("Indice de referencia", benchmark_assets)
+            rows.append(align("Indice de referencia", benchmark_assets)[1])
+        print("  Solo se conservan las fechas en las que cotizan todos los activos.\n")
+        headers = ["Cartera", "Max. fechas", "Comunes", "Descartadas"]
+        table([*headers, "Desde", "Hasta"], rows)
 
         step(3, "Modelado de la cartera", "miax_toolkit.models")
         portfolio = Portfolio(name, assets, asset_weights, risk_free=risk_free)
@@ -386,13 +487,14 @@ def main() -> None:
         if not portfolio.prices.equals(aligned):
             raise ValueError("Portfolio.prices does not match align_prices")
         exposure = ", ".join(
-            f"{currency} {share:.0%}"
+            f"{currency} {pct(share, 0)}"
             for currency, share in portfolio.currency_exposure().items()
         )
-        print(f"  Exposicion por divisa: {exposure}")
-        print(f"  Numero efectivo de activos: {portfolio.effective_n_assets():.2f}")
-        print(f"  Tipo sin riesgo medio: {portfolio.risk_free_mean():.2%}\n")
-        print(portfolio.metrics_table(benchmark).round(4).to_string())
+        print(f"  Exposicion por divisa      {exposure}")
+        print(f"  Numero efectivo de activos {portfolio.effective_n_assets():.2f}")
+        print(f"  Tipo sin riesgo medio      {pct(portfolio.risk_free_mean(), 2)}")
+        section("Metricas historicas en USD (anualizadas)")
+        show_metrics(portfolio, benchmark)
 
         step(4, "Simulacion de Monte Carlo", "miax_toolkit.simulation")
         simulation = portfolio.monte_carlo(
@@ -402,11 +504,24 @@ def main() -> None:
         asset = max(zip(assets, asset_weights), key=lambda pair: pair[1])[0]
         asset_simulation = simulate_asset(asset, config)
         print(
-            f"  {config.n_sims} simulaciones, {config.horizon_days} dias, "
-            f"valor inicial {config.initial_value:g}, semilla {config.seed}"
+            f"  {config.n_sims:,} simulaciones a {config.horizon_days} dias, "
+            f"valor inicial {config.initial_value:,.0f}, semilla {config.seed}\n"
         )
-        show_simulation(f"Cartera ({rebalancing})", simulation)
-        show_simulation(f"Solo {asset.ticker}", asset_simulation)
+        table(
+            [
+                "Simulacion",
+                "Valor final (mediana)",
+                "Prob. perdida",
+                "VaR 95 %",
+                "CVaR 95 %",
+            ],
+            [
+                simulation_row(f"Cartera, rebalanceo {rebalancing}", simulation),
+                simulation_row(f"Solo {asset.ticker} (mayor peso)", asset_simulation),
+            ],
+        )
+        print("\n  VaR 95 %: perdida minima en el 5 % de peores escenarios.")
+        print("  CVaR 95 %: perdida media en ese 5 %. Ambos sobre el valor inicial.")
     except (ValueError, TypeError) as error:
         raise SystemExit(f"\nNo se pudo construir la cartera: {error}") from None
 
@@ -415,11 +530,13 @@ def main() -> None:
     report_path = OUTPUT / "report.md"
     report = portfolio.report(benchmark=benchmark, simulation=simulation)
     report_path.write_text(report, encoding="utf-8")
-    for path in [
+    paths = [
         report_path,
         *save_charts(portfolio, benchmark, simulation, asset_simulation, asset),
-    ]:
-        print(f"  {path}")
+    ]
+    print(f"  Guardado en {OUTPUT}:")
+    for path in paths:
+        print(f"    {path.name}")
 
     if ask("\nMostrar los graficos en pantalla? (s/n)", "n", parse_yes_no):
         plt.show()
