@@ -78,6 +78,21 @@ uv remove <paquete>              # quitar una dependencia
 
 ---
 
+## Demo
+
+Programa de consola que pide la cartera al usuario (activos, pesos, índice de
+referencia, parámetros de simulación) y la recorre por las cinco capas del
+toolkit: extracción, preprocesado, modelos, simulación y reporting.
+
+```bash
+uv run --env-file .env python demo.py   # Enter en todo = cartera de ejemplo
+```
+
+Genera `output/report.md`, `output/plots_report.png` y `output/montecarlo_asset.png`.
+Guía completa, preguntas, ejemplos reproducibles y limitaciones: [docs/demo.md](docs/demo.md).
+
+---
+
 ## Estructura
 
 ```

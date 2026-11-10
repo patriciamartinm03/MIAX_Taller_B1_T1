@@ -229,7 +229,11 @@ def table(
 
 
 def pct(value: float, decimals: int = 1) -> str:
-    return f"{value:.{decimals}%}"
+    return "n/a" if pd.isna(value) else f"{value:.{decimals}%}"
+
+
+def num(value: float, decimals: int = 2) -> str:
+    return "n/a" if pd.isna(value) else f"{value:.{decimals}f}"
 
 
 # Step 1: extraction
@@ -362,7 +366,7 @@ def show_metrics(portfolio: Portfolio, benchmark: Portfolio | None) -> None:
         [
             portfolio.name if label == "Portfolio" else str(label),
             *(
-                f"{metrics.at[label, column]:.2f}"
+                num(metrics.at[label, column])
                 if column in ratios
                 else pct(metrics.at[label, column])
                 for column in METRIC_COLUMNS
