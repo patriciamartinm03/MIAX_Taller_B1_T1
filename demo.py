@@ -18,6 +18,7 @@ Output goes to output/ next to this file (report.md and PNG charts).
 """
 
 import sys
+import warnings
 from collections.abc import Callable
 from datetime import date
 from pathlib import Path
@@ -25,6 +26,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from pandas.errors import Pandas4Warning
 
 from miax_toolkit.extraction import (
     FredProvider,
@@ -39,6 +41,13 @@ from miax_toolkit.preprocessing.alignment import align_prices
 from miax_toolkit.simulation.montecarlo import returns_to_paths, simulate_returns
 
 OUTPUT = Path(__file__).resolve().parent / "output"
+
+# The data libraries (yfinance, tiingo, fredapi) still call pandas APIs that
+# pandas 4 will remove. Hide only those: a Pandas4Warning raised from our own
+# code would still be shown, because it means miax_toolkit needs fixing.
+warnings.filterwarnings(
+    "ignore", category=Pandas4Warning, module=r"(yfinance|tiingo|fredapi)(\.|$)"
+)
 
 # Defaults: 60 % US / 40 % Europe, benchmark with the same weights by region
 EXAMPLE_ASSETS = [("AAPL", 30.0), ("MSFT", 30.0), ("SAN.MC", 40.0)]
