@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 
 import yfinance as yf
+from yfinance.exceptions import YFException
 
 from miax_toolkit.extraction.base import PriceProvider, to_naive_dates
 from miax_toolkit.models import PriceSeries
@@ -23,6 +24,17 @@ class YFinanceProvider(PriceProvider):
         self.price_type = price_type
 
     def _fetch_prices(self, ticker: str, start: date, end: date) -> PriceSeries:
+        # yfinance errors (rate limit, missing ticker...) do not subclass
+        # ValueError or OSError; translate them so get_many records them per
+        # ticker instead of stopping the whole batch.
+        try:
+            return self._download(ticker, start, end)
+        except YFException as error:
+            raise ValueError(
+                f"yfinance request for '{ticker}' failed: {error}"
+            ) from None
+
+    def _download(self, ticker: str, start: date, end: date) -> PriceSeries:
         yf_ticker = yf.Ticker(ticker)
         history = yf_ticker.history(
             start=start,

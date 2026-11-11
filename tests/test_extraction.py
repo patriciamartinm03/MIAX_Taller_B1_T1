@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta
 import pandas as pd
 import pytest
 from tiingo.restclient import RestClientError
+from yfinance.exceptions import YFRateLimitError
 
 from miax_toolkit.extraction import (
     FredProvider,
@@ -525,6 +526,26 @@ def test_yfinance_get_many_records_unknown_ticker(install_yf):
     series, errors = YFinanceProvider().get_many(["AAPL", "ZZZZ"], START, END)
     assert list(series) == ["AAPL"]
     assert "no data" in errors["ZZZZ"]
+
+
+class RateLimitedYFTicker(FakeYFTicker):
+    def history(self, **kwargs) -> pd.DataFrame:
+        raise YFRateLimitError()
+
+
+def test_yfinance_get_many_records_rate_limit_and_keeps_the_rest(install_yf):
+    install_yf(
+        {
+            "AAPL": FakeYFTicker(yf_history(), us_equity_metadata()),
+            "MSFT": RateLimitedYFTicker(yf_history(), us_equity_metadata()),
+            "NVDA": FakeYFTicker(yf_history(), us_equity_metadata()),
+        }
+    )
+    series, errors = YFinanceProvider().get_many(["AAPL", "MSFT", "NVDA"], START, END)
+    assert list(series) == ["AAPL", "NVDA"]
+    assert list(errors) == ["MSFT"]
+    assert "yfinance request for 'MSFT' failed" in errors["MSFT"]
+    assert "Rate limited" in errors["MSFT"]
 
 
 def test_yfinance_rejects_invalid_price_type():
