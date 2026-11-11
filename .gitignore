@@ -19,3 +19,10 @@ data/
 
 # Demo output (report and charts)
 output/
+
+# Notebooks, build artifacts, OS and editor files
+.ipynb_checkpoints/
+dist/
+*.egg-info/
+.DS_Store
+.vscode/
