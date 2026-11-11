@@ -684,6 +684,18 @@ def test_monte_carlo_records_rebalancing_and_inputs():
     assert not np.allclose(monthly.paths, daily.paths)
 
 
+def test_monte_carlo_of_a_single_asset_portfolio():
+    # Task 4.4: the same method simulates one asset, as a one-asset portfolio
+    asset = make_series("SPY", "USD", [100, 100.5, 100.2, 100.6, 100.9])
+    portfolio = Portfolio("Only SPY", [asset], [1.0])
+    config = SimulationConfig(n_sims=40, horizon_days=15, seed=3)
+    first = portfolio.monte_carlo(config, rebalance_every=None)
+    second = portfolio.monte_carlo(config, rebalance_every=None)
+    assert first.paths.shape == (40, 16)
+    assert first.mu.shape == (1,) and first.cov.shape == (1, 1)
+    np.testing.assert_array_equal(first.paths, second.paths)
+
+
 def test_monte_carlo_same_seed_gives_same_paths():
     portfolio = make_usd_portfolio("My portfolio", THREE_ASSETS)
     config = SimulationConfig(n_sims=50, horizon_days=10, seed=7)
