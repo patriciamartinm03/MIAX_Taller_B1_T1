@@ -126,6 +126,8 @@ def parse_yes_no(text: str) -> bool:
 def parse_ticker(taken: set[str]) -> Callable[[str], str]:
     def parse(text: str) -> str:
         ticker = text.upper()
+        if not ticker:
+            raise ValueError("el ticker no puede estar vacio")
         if " " in ticker:
             raise ValueError("el ticker no puede tener espacios")
         if ticker in taken:
