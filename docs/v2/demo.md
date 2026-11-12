@@ -83,7 +83,7 @@ All of them are asked up front, in this order:
 | 3 | Start date | `2019-01-01` | Format `YYYY-MM-DD`, not in the future |
 | 4 | End date | today | After the start date, not in the future |
 | 5 | Number of assets in the portfolio | `3` | Integer between 1 and 50 |
-| 6 | Ticker of each asset | example | No spaces, no repeats; converted to upper case |
+| 6 | Ticker of each asset | example | Not empty, no spaces, no repeats; converted to upper case |
 | 7 | Weight of each asset, in % | see below | Between 0 and what is left up to 100 %; accepts `30,5` and `30%` |
 | 8 | Compare with a benchmark? | `s` | `s` (yes) or `n` (no) |
 | 9 | Benchmark assets and weights | `SPY`, `FEZ` | Same as 5–7 |

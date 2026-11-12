@@ -216,13 +216,17 @@ classDiagram
         +weights: list~float~
         +risk_free: MacroSeries | None
         +prices: DataFrame  «auto, USD, aligned»
+        +risk_free_daily() Series | float
+        +risk_free_mean() float
         +asset_returns() DataFrame
         +returns() Series
         +value(initial_value, rebalance_every) Series
         +metrics_table(benchmark) DataFrame
+        +metrics_period(benchmark) tuple
         +benchmark_comparison(benchmark) Series
         +benchmark_issues(benchmark) list~str~
         +benchmark_overlap(benchmark) DataFrame
+        +benchmark_overlap_share(benchmark) float
         +correlation() DataFrame
         +diversification_benefit() float
         +currency_exposure() Series
@@ -262,10 +266,10 @@ classDiagram
         <<frozen dataclass>>
         +max_correlation = 0.8
         +max_weight = 0.4
-        +min_effective_assets = 3
+        +min_effective_assets = 3.0
         +max_drawdown_limit = -0.20
-        +min_years = 5
-        +var_level = 5
+        +min_years = 5.0
+        +var_level = 5.0
         +decimals = 2
     }
     class DrawdownDetails {

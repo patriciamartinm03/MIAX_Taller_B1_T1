@@ -126,6 +126,8 @@ def parse_yes_no(text: str) -> bool:
 def parse_ticker(taken: set[str]) -> Callable[[str], str]:
     def parse(text: str) -> str:
         ticker = text.upper()
+        if not ticker:
+            raise ValueError("el ticker no puede estar vacio")
         if " " in ticker:
             raise ValueError("el ticker no puede tener espacios")
         if ticker in taken:
@@ -293,7 +295,7 @@ def load_risk_free(start: date, end: date) -> MacroSeries | None:
     section("Tipo sin riesgo (FRED)")
     try:
         series = FredProvider().get_series("DTB3", start, end, currency="USD")
-    except ValueError as error:
+    except (ValueError, OSError) as error:
         first_line = str(error).splitlines()[0]
         print(f"  No disponible ({first_line})")
         print("  Se usa un tipo sin riesgo de 0 para Sharpe y Sortino.")
